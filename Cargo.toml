@@ -1,0 +1,13 @@
+[package]
+name = "csidh_walk"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ark-ff = "0.4.0-alpha.4"
+ark-poly = "0.4.0-alpha.4"
+ark-crypto-primitives = "0.4.0-alpha"
+ark-sponge = "0.4.0-alpha"
+ark-std= "0.4.0-alpha"
