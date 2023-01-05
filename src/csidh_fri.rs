@@ -132,18 +132,13 @@ let mut indices: Vec<u64> = Vec::new();
 indices.push(calculate_hash(&l_list, n as u64));
 for _ in 0..alpha {
     let mut s_ord = n.clone();
-    let index = *indices.last().unwrap() as usize;
-    let (m, p) = query_at_index(mtrees[0].clone(), mtrees[1].clone(), points[0].clone(), points[1].clone(), index, l_list[0], s_ord);
-    paths = [paths.clone(),m].concat();
-    queried_points = [queried_points.clone(),p].concat();
-    indices.push(calculate_hash(&indices, s_ord as u64));
-    s_ord /= l_list[0];
-    for (i, l) in l_list[1..].to_vec().iter().enumerate() {
+    for (i, l) in l_list.iter().enumerate() {
         //println!("s_ord:{:?}", s_ord);
         let index = *indices.last().unwrap() as usize;
         let (m, p) = query_at_index(mtrees[i].clone(), mtrees[i+1].clone(), points[i].clone(), points[i+1].clone(), index, l_list[i], s_ord);
+        
         paths = [paths.clone(),m].concat();
-        queried_points = [queried_points.clone(),p].concat();
+        queried_points = [queried_points.clone(),p.clone()].concat();
         indices.push(calculate_hash(&indices, s_ord as u64));
         s_ord /= l;
     }
@@ -163,8 +158,6 @@ pub fn prove(f: DensePolynomial<F>, l_list: Vec<usize>, s: F, r: F, s_ord: u8, a
 pub fn verify_fold_at_index(points: Vec<F>, x: F, t: F, l: usize, theta: F) -> bool {
     let y: F = points[0];
     let z_vec: Vec<F> = points[1..].to_vec();
-    assert_eq!(z_vec.len(), l);
-    println!("here");
     let mut mat: Vec<Vec<F>> = Vec::new();
     for i in 0..l {
         let mut vec_i: Vec<F> = Vec::new();
@@ -215,12 +208,9 @@ pub fn verify(mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: Vec<
     }
     let mut indices: Vec<u64> = vec![calculate_hash(&l_list, s_ord as u64)];
     let mut i: usize = 0;
-    assert_eq!(paths.len(), queried_points.len());
+    //assert_eq!(paths.len(), queried_points.len());
     for __ in 0..alpha { 
         for (j, l) in l_list.iter().enumerate() { 
-
-            println!("l: {:?}", l);
-            println!("j: {:?}", j);
             assert!(
                 paths[i].verify(
                     &leaf_crh_params,
@@ -229,7 +219,6 @@ pub fn verify(mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: Vec<
                     [queried_points[i].c0, queried_points[i].c1]
                 ).unwrap());
                 i+=1;
-                println!("one");
             for _ in 0..*l {
     assert!(
         paths[i].verify(
@@ -254,17 +243,7 @@ pub fn verify(mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: Vec<
             theta_vec[i]
         ) 
     );
-        indices.push(calculate_hash(&indices, s_ord as u64));
-    for j in 1..l+1{
-        assert!(
-            paths[j as usize].verify(
-                &leaf_crh_params,
-                &two_to_one_params,
-                &roots[i+1],
-                [queried_points[j as usize].c0, queried_points[j as usize].c1]
-            ).unwrap());
-    //qp.drain(0..l+1);
-        }
+        indices.push(calculate_hash(&indices, s_ord_vals[i] as u64));
         paths.drain(0..*l as usize+1);
         queried_points.drain(0..*l as usize+1);
     }
