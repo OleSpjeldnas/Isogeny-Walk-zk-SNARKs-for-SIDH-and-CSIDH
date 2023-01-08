@@ -1,4 +1,4 @@
-use ark_ff::{Fp448, MontBackend, Fp2, MontFp, Fp2Config, Field};
+use ark_ff::{Fp448, MontBackend, Fp2, MontFp, Fp2Config, Field, FftField};
 
 
 #[derive(ark_ff::fp::MontConfig)]
@@ -7,9 +7,11 @@ use ark_ff::{Fp448, MontBackend, Fp2, MontFp, Fp2Config, Field};
 
 pub struct FqConfig;
 pub type F = Fp448<MontBackend<FqConfig, 7>>;
-pub type Fq2 = Fp2<Fq2Config>;
 
+pub type Fq2 = Fp2<Fq2Config>;
 pub struct Fq2Config;
+pub struct Ft(Fq2);
+ 
 
 impl Fp2Config for Fq2Config {
     type Fp = F;
