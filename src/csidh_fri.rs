@@ -179,7 +179,7 @@ y == y_supposedly
 }
 
 //Returns indices to query for PolyIOP together with the corresponding points 
-pub fn verify(mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: Vec<Fp>, l_list: Vec<usize>, s: F, r: F, s_ord: usize, alpha: u8) 
+pub fn fri_verify(mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: Vec<Fp>, l_list: Vec<usize>, s: F, r: F, s_ord: usize, alpha: u8) 
 -> (Vec<F>, Vec<usize>) {
     let leaf_crh_params = poseidon_parameters();
     let two_to_one_params = leaf_crh_params.clone();

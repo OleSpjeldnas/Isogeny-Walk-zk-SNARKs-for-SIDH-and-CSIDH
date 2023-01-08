@@ -8,8 +8,8 @@ use merkle::{FieldMT, poseidon_parameters};
 
 // Witness is the witness polynomial, psi the inverse of w(x)-w(g^2x), g the generator of the interpolation domain, 
 //the evaluation domain is E = r<s>. Finally, s_ord is the size of E.
-fn prove(witness: DensePolynomial<F>, witness_plus: DensePolynomial<F>, witness_plus_plus: DensePolynomial<F>,
-        psi: DensePolynomial<F>, g: F, s: F, r: F, s_ord: u64, y_start: &F, y_end: &F, l_list: Vec<usize>, rep_param: usize) {
+fn prove(witness: DensePolynomial<F>, witness_plus: DensePolynomial<F>, witness_plus_plus: DensePolynomial<F>,                 // Challenges, roots, roots_fri, paths_fri, paths, points_fri, points
+        psi: DensePolynomial<F>, g: F, s: F, r: F, s_ord: u64, y_start: &F, y_end: &F, l_list: Vec<usize>, rep_param: usize) -> (Vec<F>, Vec<Fp>, Vec<Fp>, Vec<FieldPath>, Vec<Vec<FieldPath>>, Vec<F>, Vec<Vec<F>>) {
     let n: usize = witness.coeffs.len();
     let mut rng = test_rng();
     let a: F = F::rand(&mut rng);
@@ -66,9 +66,9 @@ fn prove(witness: DensePolynomial<F>, witness_plus: DensePolynomial<F>, witness_
 
     // Compute C(x)
     let c1: DensePolynomial<F> = initial_poly(&y_start, b_witness.clone());
-    let c2: DensePolynomial<F> = final_poly(&y_end, b_witness.clone(), g, n as u64);
-    let c3: DensePolynomial<F> = mod_poly_poly(&b_witness, &b_witness_plus, n, g);
-    let c4: DensePolynomial<F> = psi_poly(&b_witness, &b_witness_plus_plus, &psi, n, g);
+    let c4: DensePolynomial<F> = final_poly(&y_end, b_witness.clone(), g, n as u64);
+    let c2: DensePolynomial<F> = mod_poly_poly(&b_witness, &b_witness_plus, n, g);
+    let c3: DensePolynomial<F> = psi_poly(&b_witness, &b_witness_plus_plus, &psi, n, g);
 
     let c: DensePolynomial<F> = compute_c(c1, c2, c3, c4, &vec![alpha_1, alpha_2, alpha_3], &n);
 
@@ -129,7 +129,7 @@ fn prove(witness: DensePolynomial<F>, witness_plus: DensePolynomial<F>, witness_
     let challenge_vals: Vec<F> = vec![witness_y, witness_y_plus, witness_y_plus_plus, psi_y, c_y];
     
     // Finally, create and commit to the composition polynomial P(x)
-    let mut zeta_vec: Vec<Fp> = vec![poseidon::CRH::<Fp>::evaluate(&params, roots.clone()).unwrap()];
+    let mut zeta_vec: Vec<Fp> = vec![poseidon::CRH::<Fp>::evaluate(&params, vec![z.c0]).unwrap()];
     for _ in 0..4{
         zeta_vec.push(poseidon::CRH::<Fp>::evaluate(&params, zeta_vec.clone()).unwrap());
     }
@@ -155,16 +155,137 @@ fn prove(witness: DensePolynomial<F>, witness_plus: DensePolynomial<F>, witness_
 
     // Compute the constraint polynomial C(x)
 
-    let (paths, points, roots, indices) = fri_prove(p, l_list, s, r, s_ord as u8, rep_param);
+    let (paths_fri, points_fri, roots_fri, indices) = fri_prove(p, l_list, s, r, s_ord as u8, rep_param);
     
+    let mut witness_query_vals: Vec<F> = vec![];
+    let mut witness_plus_query_vals: Vec<F> = vec![];
+    let mut witness_plus_plus_query_vals: Vec<F> = vec![];
+    let mut psi_query_vals: Vec<F> = vec![];
+    let mut c_query_vals: Vec<F> = vec![];
+
+    let mut witness_query_path: Vec<FieldPath> = vec![];
+    let mut witness_plus_query_path: Vec<FieldPath> = vec![];
+    let mut witness_plus_plus_query_path: Vec<FieldPath> = vec![];
+    let mut psi_query_path: Vec<FieldPath> = vec![];
+    let mut c_query_path: Vec<FieldPath> = vec![];
+
+    let plus_index: usize = (s_ord as usize)/n;
+    for index in indices.iter() {
+        witness_query_vals.push(witness_evals[*index]);
+        witness_plus_query_vals.push(witness_evals[(*index + plus_index) % n]);
+        witness_plus_plus_query_vals.push(witness_evals[(*index + 2*plus_index) % n]);
+        psi_query_vals.push(psi_evals[*index]);
+        c_query_vals.push(c_evals[*index]);
+
+        witness_query_path.push(witness_mtree.generate_proof(*index).unwrap());
+        witness_plus_query_path.push(witness_mtree.generate_proof((*index + plus_index) % n).unwrap());
+        witness_plus_plus_query_path.push(witness_mtree.generate_proof((*index + 2*plus_index) % n).unwrap());
+        psi_query_path.push(psi_mtree.generate_proof(*index).unwrap());
+        c_query_path.push(c_mtree.generate_proof(*index).unwrap());
+    }
+    let additional_paths: Vec<Vec<FieldPath>> = vec![witness_query_path, witness_plus_query_path, witness_plus_plus_query_path, psi_query_path, c_query_path];
+    let additional_points: Vec<Vec<F>> = vec![witness_query_vals, witness_plus_query_vals, witness_plus_plus_query_vals, psi_query_vals, c_query_vals];
+
+    (challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points)
+
 }
 
-    fn mod_poly(x: F, y: F) -> F {
-        x*x*x+y*y*y-x*x*y*y+F::from(1488u128)
+fn verify(challenges: Vec<F>, roots_fri: Vec<Fp>, roots: Vec<Fp>, paths_fri: Vec<FieldPath>, additional_paths: Vec<Vec<FieldPath>>, points_fri: Vec<F>, additional_points: Vec<Vec<F>>,
+            g: F, s: F, r: F, n: &u64, s_ord: u64, y_start: &F, y_end: &F, l_list: Vec<usize>, rep_param: usize) -> bool {
+            
+                // Compute z, alphas and zetas 
+            let params = poseidon_parameters(); 
+            let leaf_crh_params = params.clone();
+            let two_to_one_params = params.clone();
+            let z: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, roots.clone()).unwrap(), Fp::from(0));
+
+            let gz: F = g*z;
+            let ggz: F = g*gz;
+            let alpha_1: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, roots[..2].to_vec().clone()).unwrap(), Fp::from(0));
+            let alpha_2: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_1.c0]).unwrap(), Fp::from(0));
+            let alpha_3: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_2.c0]).unwrap(), Fp::from(0));
+            let mut zeta_vec: Vec<Fp> = vec![poseidon::CRH::<Fp>::evaluate(&params, vec![z.c0]).unwrap()];
+            for _ in 0..4{
+                zeta_vec.push(poseidon::CRH::<Fp>::evaluate(&params, zeta_vec.clone()).unwrap());
+            }
+            // Check that the FRI queries are correct
+            let (points_first, indices_first) = fri_verify(paths_fri, points_fri.clone(), roots_fri, l_list.clone(), s.clone(), r.clone(), s_ord.clone() as usize, rep_param as u8);
+            // Check that the challenges were computed correctly
+            let E: u64 = 3*(*n) + 13;
+            let c1: F = initial_challenge(y_start, &challenges[0], &z, n);
+            let c2: F = final_challenge(y_end, &challenges[0], &z, n, &g);
+            let c3: F = mod_challenge(&challenges[0], &challenges[1], &z, &g, &n);
+            let c4: F = psi_challenge(&challenges[0], &challenges[2], &challenges[3], &z, n, &g);
+            
+            let asserted_c: F = alpha_1*z.pow(&[E-n-2])*c1 
+                                + alpha_3*z.pow(&[E-n-2])*c2 
+                                + c3
+                                + alpha_2*z.pow(&[E-n-5])*c4;
+            assert_eq!(asserted_c, challenges[4]);
+
+            // Check consistency between P(x) in FRI and the committed-to polynomials
+            for (i, index) in indices_first.iter().enumerate() {
+                let x_0: F = r*s.pow(&[*index as u64]);
+                let witness_val: F = additional_points[0][i];
+                let witness_plus_val: F = additional_points[1][i];
+                let witness_plus_plus_val: F = additional_points[2][i];
+                let psi_val: F = additional_points[3][i];
+                let c_val: F = additional_points[4][i];
+                let asserted_p: F = F::new(zeta_vec[0], Fp::from(0))*x_0.pow(&[E-n])*(witness_val-challenges[0])/(x_0 - z)
+                                    + F::new(zeta_vec[1], Fp::from(0))*x_0.pow(&[E-n])*(witness_plus_val-challenges[1])/(x_0 - gz)
+                                    + F::new(zeta_vec[2], Fp::from(0))*x_0.pow(&[E-n])*(witness_plus_plus_val-challenges[2])/(x_0 - ggz)
+                                    + F::new(zeta_vec[3], Fp::from(0))*x_0.pow(&[E-n-1])*(psi_val-challenges[3])/(x_0 - z)
+                                    + F::new(zeta_vec[4], Fp::from(0))*(c_val-challenges[4])/(x_0 - z);
+                assert_eq!(asserted_p, points_first[i]);
+                // Verify Merkle Paths
+                assert!(
+                    additional_paths[0][i].verify(
+                        &leaf_crh_params,
+                        &two_to_one_params,
+                        &roots[0],
+                        [witness_val.c0, witness_val.c1]
+                    ).unwrap());
+
+                assert!(
+                    additional_paths[1][i].verify(
+                        &leaf_crh_params,
+                        &two_to_one_params,
+                        &roots[0],
+                        [witness_plus_val.c0, witness_plus_val.c1]
+                    ).unwrap());
+
+                assert!(
+                    additional_paths[2][i].verify(
+                        &leaf_crh_params,
+                        &two_to_one_params,
+                        &roots[0],
+                        [witness_plus_plus_val.c0, witness_plus_plus_val.c1]
+                    ).unwrap());
+
+                assert!(
+                    additional_paths[3][i].verify(
+                        &leaf_crh_params,
+                        &two_to_one_params,
+                        &roots[1],
+                        [psi_val.c0, psi_val.c1]
+                    ).unwrap());
+                assert!(
+                    additional_paths[4][i].verify(
+                        &leaf_crh_params,
+                        &two_to_one_params,
+                        &roots[2],
+                        [c_val.c0, c_val.c1]
+                    ).unwrap());
+            }
+            true}
+    fn mod_challenge(x: &F, y: &F, z: &F, g: &F, T: &u64) -> F {
+        let eval: F = x*x*x+y*y*y-x*x*y*y+F::from(1488u128)
         *(x*x*y+y*y*x)-F::from(162000u128)*
         (x*x+y*y)+F::from(40773375u128)*x*y
         +F::from(8748000000u128)*(x+y)-
-        F::from(157464000000000u128)
+        F::from(157464000000000u128);
+
+        (z-g.pow(&[*n-1]))*eval / (z.pow(&[*n-1])-F::from(1))
     }
     //evaluates Phi_2(witness(x), witness_plus(x))
     fn mod_poly_const_eval_at_x(x: &F, witness: &DensePolynomial<F>, g: &F) -> F {
@@ -270,6 +391,15 @@ fn prove(witness: DensePolynomial<F>, witness_plus: DensePolynomial<F>, witness_
         temp.naive_mul(&DensePolynomial{coeffs: vec![-g.pow(&[T as u64-1]), F::from(1)]}).div(&DensePolynomial{ coeffs: [vec![F::from(1)], vec![F::from(0); T-1], vec![F::from(1)]].concat()})
     }
     
+    fn initial_challenge(y_0: &F, eval: &F, x_0: &F, n: &u64) -> F {
+
+        (eval - y_0) / (x_0.pow(&[*n])-F::from(1))
+
+    }
+    fn final_challenge(y_eng: &F, eval: &F, x_0: &F, n: &u64, g: &F) -> F {
+
+        (eval - y_eng) / (x_0.pow(&[*n])-g.pow(&[*n-1]))
+    }
     //Returns ((x-g^(T-2))*(x-g^(T-1))*(p(x)-q(x))*psi(x)-1)/(x^T-1)
     fn psi_poly(p: &DensePolynomial<F>, q: &DensePolynomial<F>, psi: &DensePolynomial<F>, T: usize, g: F) -> DensePolynomial<F> {
         let diff:DensePolynomial<F> = p.sub(q);
@@ -279,6 +409,14 @@ fn prove(witness: DensePolynomial<F>, witness_plus: DensePolynomial<F>, witness_
         x_1_poly.naive_mul(&(diff.naive_mul(psi)+DensePolynomial{coeffs:vec![F::from(-1)]})).div(&DensePolynomial{ coeffs: [vec![F::from(1)], vec![F::from(0); T-1], vec![F::from(1)]].concat()})
 
         }
+    
+    fn psi_challenge(y_witness: &F, y_witness_plusplus: &F, y_psi: &F, x_0: &F, n: &u64, g: &F) -> F {
+        let g_pow: F =  g.pow(&[*n as u64-2]);
+        let g_prefactor: F = (x_0 - g_pow) * (x_0 - g_pow*g);
+        
+        g_prefactor*((y_witness-y_witness_plusplus)*y_psi-F::from(1))/(x_0.pow(&[*n])-F::from(1))
+    }
+    
     fn lines_from_file(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
     BufReader::new(File::open(filename)?).lines()
     .map(|line| {
