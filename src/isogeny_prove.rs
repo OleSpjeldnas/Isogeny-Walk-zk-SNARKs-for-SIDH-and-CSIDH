@@ -1,15 +1,15 @@
 use std::ops::{Div, Mul, Sub};
+use rayon::prelude::*;
 
 use super::*;
 use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_ff::{UniformRand, FftField};
 use ark_std::test_rng;
 use merkle::{FieldMT, poseidon_parameters};
-
 // Witness is the witness polynomial, psi the inverse of w(x)-w(g^2x), g the generator of the interpolation domain, 
 //the evaluation domain is E = r<s>. Finally, s_ord is the size of E.
-fn prove(witness: DensePolynomial<F>, witness_plus: DensePolynomial<F>, witness_plus_plus: DensePolynomial<F>,                 // Challenges, roots, roots_fri, paths_fri, paths, points_fri, points
-        psi: DensePolynomial<F>, g: F, s: F, r: F, s_ord: u64, y_start: &F, y_end: &F, l_list: Vec<usize>, rep_param: usize) -> (Vec<F>, Vec<Fp>, Vec<Fp>, Vec<FieldPath>, Vec<Vec<FieldPath>>, Vec<F>, Vec<Vec<F>>) {
+pub fn prove(witness: DensePolynomial<F>, witness_plus: DensePolynomial<F>, witness_plus_plus: DensePolynomial<F>,                 // Challenges, roots, roots_fri, paths_fri, paths, points_fri, points
+    psi: DensePolynomial<F>, g: F, s: F, r: F, s_ord: u64, y_start: &F, y_end: &F, l_list: Vec<usize>, rep_param: usize) -> (Vec<F>, Vec<Fp>, Vec<Fp>, Vec<FieldPath>, Vec<Vec<FieldPath>>, Vec<F>, Vec<Vec<F>>){
     let n: usize = witness.coeffs.len();
     let mut rng = test_rng();
     let a: F = F::rand(&mut rng);
@@ -25,44 +25,47 @@ fn prove(witness: DensePolynomial<F>, witness_plus: DensePolynomial<F>, witness_
     let leaf_crh_params = params.clone();
     let two_to_one_params = params.clone();
 
-    let mut witness_evals_merkle: Vec<Vec<Fp>> = Vec::new();
-    let mut psi_evals_merkle: Vec<Vec<Fp>> = Vec::new();
-    let mut witness_evals: Vec<F> = Vec::new();
-    let mut psi_evals: Vec<F> = Vec::new();
 
-    for i in 0..s_ord {
-        let w: F = b_witness.evaluate(&(r*s.pow(&[i])));
-        let p: F = psi.evaluate(&(r*s.pow(&[i])));
-        witness_evals_merkle.push(vec![w.c0, w.c1]);
-        psi_evals_merkle.push(vec![p.c0, p.c1]);
+    let D_0: Vec<F> = (0..s_ord).into_par_iter()
+                                .map(|i| r*s.pow([i]))
+                                .collect();
+    let witness_evals: Vec<F> = D_0.clone().into_par_iter()
+                                   .map(|x| b_witness.evaluate(&x))
+                                   .collect();
+    let psi_evals: Vec<F> = D_0.clone().into_par_iter()
+    .map(|x| psi.evaluate(&x))
+    .collect();
+    println!("Checkpoint 0");
 
-        witness_evals.push(w);
-        psi_evals.push(p);
-    }
-    let k = (((s_ord as f32).log2()).ceil()) as u8;
-    for _ in 0..(2u64.pow(k.into())-s_ord) {
-        witness_evals_merkle.push(vec![Fp::from(0),Fp::from(0)]);
-        psi_evals_merkle.push(vec![Fp::from(0),Fp::from(0)]);
-    }
+    let mut witness_evals_merkle: Vec<Vec<Fp>> = witness_evals.par_iter().map(|x| vec![x.c0, x.c1]).collect();
+    let mut psi_evals_merkle: Vec<Vec<Fp>> = psi_evals.par_iter().map(|x| vec![x.c0, x.c1]).collect();
+    let k: u32 = (((s_ord as f32).log2()).ceil()) as u32;
+    witness_evals_merkle =vec![witness_evals_merkle, vec![vec![Fp::from(0),Fp::from(0)]; 2u64.pow(k) as usize - s_ord as usize]].concat();
+    psi_evals_merkle =vec![psi_evals_merkle, vec![vec![Fp::from(0),Fp::from(0)]; 2u64.pow(k) as usize - s_ord as usize]].concat();
+    
+    let w_merkle_slice: Vec<&[Fp]> = witness_evals_merkle.par_iter().map(|x| x.as_slice()).collect();
+    let psi_merkle_slice: Vec<&[Fp]> = psi_evals_merkle.par_iter().map(|x| x.as_slice()).collect();
     // Merkle tree of witness evaluations on E
     let witness_mtree: FieldMT = FieldMT::new(
         &leaf_crh_params,
         &two_to_one_params,
-        witness_evals_merkle.iter().map(|x| x.as_slice()),
+        w_merkle_slice,
     )
     .unwrap();
     // Merkle tree of psi evaluations on E
     let psi_mtree: FieldMT = FieldMT::new(
         &leaf_crh_params,
         &two_to_one_params,
-        psi_evals_merkle.iter().map(|x| x.as_slice()),
+        psi_merkle_slice
     )
     .unwrap();
-
+println!("Checkpoint 1");
     let mut roots: Vec<Fp> = vec![witness_mtree.root(), psi_mtree.root()];
+    //let roots: Vec<Fp> = vec![Fp::from(0)];
     let alpha_1: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, roots.clone()).unwrap(), Fp::from(0));
     let alpha_2: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_1.c0]).unwrap(), Fp::from(0));
     let alpha_3: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_2.c0]).unwrap(), Fp::from(0));
+    let alpha_4: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_3.c0]).unwrap(), Fp::from(0));
 
     // Compute C(x)
     let c1: DensePolynomial<F> = initial_poly(&y_start, b_witness.clone());
@@ -70,37 +73,31 @@ fn prove(witness: DensePolynomial<F>, witness_plus: DensePolynomial<F>, witness_
     let c2: DensePolynomial<F> = mod_poly_poly(&b_witness, &b_witness_plus, n, g);
     let c3: DensePolynomial<F> = psi_poly(&b_witness, &b_witness_plus_plus, &psi, n, g);
 
-    let c: DensePolynomial<F> = compute_c(c1, c2, c3, c4, &vec![alpha_1, alpha_2, alpha_3], &n);
+    let c: DensePolynomial<F> = compute_c(c1, c2, c3, c4, &vec![alpha_1, alpha_2, alpha_3, alpha_4], &n);
 
     // Evaluate C(x) on E and commit
-    let mut c_evals: Vec<F> = Vec::new();
-    let mut c_evals_merkle: Vec<Vec<Fp>> = Vec::new();
-    for i in 0..s_ord {
-        let w: F = c.evaluate(&(r*s.pow(&[i])));
-        c_evals_merkle.push(vec![w.c0, w.c1]);
-        c_evals.push(w);
-    }
-    let k = (((s_ord as f32).log2()).ceil()) as u8;
-    for _ in 0..(2u64.pow(k.into())-s_ord) {
-        c_evals_merkle.push(vec![Fp::from(0),Fp::from(0)]);
-    }
+    let c_evals: Vec<F> = D_0.clone().into_par_iter()
+                                     .map(|x| c.evaluate(&x))
+                                     .collect();
+    let mut c_evals_merkle: Vec<Vec<Fp>> = c_evals.par_iter()
+                                            .map(|x| vec![x.c0, x.c1])
+                                            .collect();
+    let k: u32 = (((s_ord as f32).log2()).ceil()) as u32;
+    c_evals_merkle =vec![c_evals_merkle, vec![vec![Fp::from(0),Fp::from(0)]; 2u64.pow(k) as usize - s_ord as usize]].concat();
+    let c_merkle_slice: Vec<&[Fp]> = c_evals_merkle.par_iter().map(|x| x.as_slice()).collect();
+    
     // Merkle tree of witness evaluations on E
     let c_mtree: FieldMT = FieldMT::new(
         &leaf_crh_params,
         &two_to_one_params,
-        c_evals_merkle.iter().map(|x| x.as_slice()),
+        c_merkle_slice
     )
     .unwrap();
+    println!("Checkpoint 2");
     roots.push(c_mtree.root());
     // Compute the evaluations of the constraint polynomial C(x) on E
-    //let c_evals: Vec<Vec<Fp>> = compute_c_evaluations(&witness_evals, &psi_evals, &n, &(s_ord as usize), &r, &s, y_0, &g, &vec![alpha_1, alpha_2]);
-    //let c_mtree: FieldMT = FieldMT::new(
-   //     &leaf_crh_params,
-   //    &two_to_one_params,
-   //     c_evals.iter().map(|x| x.as_slice()),
-    //)
-    //.unwrap();
-    //roots.push(c_mtree.root());
+   
+    roots.push(c_mtree.root());
 
     // Compute the values of the respective polynomials at the challenge z
     let z: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, roots.clone()).unwrap(), Fp::from(0));
@@ -111,12 +108,13 @@ fn prove(witness: DensePolynomial<F>, witness_plus: DensePolynomial<F>, witness_
     let witness_y_plus_plus: F = b_witness.evaluate(&ggz);
     let psi_y: F = psi.evaluate(&z);
     let c_y: F = c.evaluate(&z);
+    let c_y: F = F::from(0);
     //let T: u64 = u64::try_from(n).unwrap();
-    let E: usize = 3*n + 13;
-    //let deg_1: u64 = E-T-2;
-    //let deg_2: u64 = E-T-5;
+    let E: usize = 32*n/9;
+    let deg_1: u64 = (E-n-2).try_into().unwrap();
+    let deg_2: u64 = (E-n-5).try_into().unwrap();
 
-    //let init_term: F = (witness_y - y_0) / (z.pow(&[T])-F::from(1));
+    //let init_term: F = (witness_y - y_start) / (z.pow(&[T])-F::from(1));
     //let z_pow_T_minus_1: F = z.pow(&[T]) - F::from(1);
     //let g_T_2: F = g.pow(&[T-2]);
     //let g_T_1: F = g*g_T_2;
@@ -133,64 +131,65 @@ fn prove(witness: DensePolynomial<F>, witness_plus: DensePolynomial<F>, witness_
     for _ in 0..4{
         zeta_vec.push(poseidon::CRH::<Fp>::evaluate(&params, zeta_vec.clone()).unwrap());
     }
-    let p: DensePolynomial<F> = DensePolynomial { coeffs: vec![vec![F::from(0); E-n-1], vec![F::new(zeta_vec[0], Fp::from(0))]].concat() }
+    let p: DensePolynomial<F> = DensePolynomial { coeffs: vec![vec![F::from(0); E-n], vec![F::new(zeta_vec[0], Fp::from(0))]].concat() }
                                 .naive_mul(&(b_witness.clone() + DensePolynomial { coeffs: vec![-challenge_vals[0]] }))
                                 .div(&DensePolynomial { coeffs: vec![-z, F::from(1)]})
                                 + 
-                                DensePolynomial { coeffs: vec![vec![F::from(0); E-n-1], vec![F::new(zeta_vec[1], Fp::from(0))]].concat() }
+                                DensePolynomial { coeffs: vec![vec![F::from(0); E-n], vec![F::new(zeta_vec[1], Fp::from(0))]].concat() }
                                 .naive_mul(&(b_witness.clone() + DensePolynomial { coeffs: vec![-challenge_vals[1]] }))
                                 .div(&DensePolynomial { coeffs: vec![-gz, F::from(1)]})
                                 + 
-                                DensePolynomial { coeffs: vec![vec![F::from(0); E-n-1], vec![F::new(zeta_vec[2], Fp::from(0))]].concat() }
+                                DensePolynomial { coeffs: vec![vec![F::from(0); E-n], vec![F::new(zeta_vec[2], Fp::from(0))]].concat() }
                                 .naive_mul(&(b_witness.clone() + DensePolynomial { coeffs: vec![-challenge_vals[2]] }))
                                 .div(&DensePolynomial { coeffs: vec![-ggz, F::from(1)]})
                                 +
                                 DensePolynomial { coeffs: vec![vec![F::from(0); E-n-1], vec![F::new(zeta_vec[3], Fp::from(0))]].concat() }
                                 .naive_mul(&(psi + DensePolynomial { coeffs: vec![-challenge_vals[3]] }))
-                                .div(&DensePolynomial { coeffs: vec![-z, F::from(1)]})
-                                +
-                                DensePolynomial { coeffs:  vec![F::new(zeta_vec[4], Fp::from(0))]}
-                                .naive_mul(&(c + DensePolynomial { coeffs: vec![-challenge_vals[4]] }))
                                 .div(&DensePolynomial { coeffs: vec![-z, F::from(1)]});
+                                //+
+                                //DensePolynomial { coeffs:  vec![F::new(zeta_vec[4], Fp::from(0))]}
+                                //.naive_mul(&(c + DensePolynomial { coeffs: vec![-challenge_vals[4]] }))
+                                //.div(&DensePolynomial { coeffs: vec![-z, F::from(1)]});
 
-    // Compute the constraint polynomial C(x)
 
-    let (paths_fri, points_fri, roots_fri, indices) = fri_prove(p, l_list, s, r, s_ord as u8, rep_param);
+    let (paths_fri, points_fri, roots_fri, indices) = fri_prove(p, l_list, s, r, s_ord, rep_param);
     
-    let mut witness_query_vals: Vec<F> = vec![];
-    let mut witness_plus_query_vals: Vec<F> = vec![];
-    let mut witness_plus_plus_query_vals: Vec<F> = vec![];
-    let mut psi_query_vals: Vec<F> = vec![];
-    let mut c_query_vals: Vec<F> = vec![];
+println!("Checkpoint 4");
+let mut witness_query_vals: Vec<F> = vec![];
+let mut witness_plus_query_vals: Vec<F> = vec![];
+let mut witness_plus_plus_query_vals: Vec<F> = vec![];
+let mut psi_query_vals: Vec<F> = vec![];
+let mut c_query_vals: Vec<F> = vec![];
 
-    let mut witness_query_path: Vec<FieldPath> = vec![];
-    let mut witness_plus_query_path: Vec<FieldPath> = vec![];
-    let mut witness_plus_plus_query_path: Vec<FieldPath> = vec![];
-    let mut psi_query_path: Vec<FieldPath> = vec![];
-    let mut c_query_path: Vec<FieldPath> = vec![];
+let mut witness_query_path: Vec<FieldPath> = vec![];
+let mut witness_plus_query_path: Vec<FieldPath> = vec![];
+let mut witness_plus_plus_query_path: Vec<FieldPath> = vec![];
+let mut psi_query_path: Vec<FieldPath> = vec![];
+let mut c_query_path: Vec<FieldPath> = vec![];
 
-    let plus_index: usize = (s_ord as usize)/n;
-    for index in indices.iter() {
-        witness_query_vals.push(witness_evals[*index]);
-        witness_plus_query_vals.push(witness_evals[(*index + plus_index) % n]);
-        witness_plus_plus_query_vals.push(witness_evals[(*index + 2*plus_index) % n]);
-        psi_query_vals.push(psi_evals[*index]);
-        c_query_vals.push(c_evals[*index]);
+let plus_index: usize = (s_ord as usize)/n;
+for index in indices.iter() {
+    witness_query_vals.push(witness_evals[*index]);
+    witness_plus_query_vals.push(witness_evals[(*index + plus_index) % n]);
+    witness_plus_plus_query_vals.push(witness_evals[(*index + 2*plus_index) % n]);
+    psi_query_vals.push(psi_evals[*index]);
+    c_query_vals.push(c_evals[*index]);
 
-        witness_query_path.push(witness_mtree.generate_proof(*index).unwrap());
-        witness_plus_query_path.push(witness_mtree.generate_proof((*index + plus_index) % n).unwrap());
-        witness_plus_plus_query_path.push(witness_mtree.generate_proof((*index + 2*plus_index) % n).unwrap());
-        psi_query_path.push(psi_mtree.generate_proof(*index).unwrap());
-        c_query_path.push(c_mtree.generate_proof(*index).unwrap());
-    }
-    let additional_paths: Vec<Vec<FieldPath>> = vec![witness_query_path, witness_plus_query_path, witness_plus_plus_query_path, psi_query_path, c_query_path];
-    let additional_points: Vec<Vec<F>> = vec![witness_query_vals, witness_plus_query_vals, witness_plus_plus_query_vals, psi_query_vals, c_query_vals];
+    witness_query_path.push(witness_mtree.generate_proof(*index).unwrap());
+    witness_plus_query_path.push(witness_mtree.generate_proof((*index + plus_index) % n).unwrap());
+    witness_plus_plus_query_path.push(witness_mtree.generate_proof((*index + 2*plus_index) % n).unwrap());
+    psi_query_path.push(psi_mtree.generate_proof(*index).unwrap());
+    c_query_path.push(c_mtree.generate_proof(*index).unwrap());
+}
+let additional_paths: Vec<Vec<FieldPath>> = vec![witness_query_path, witness_plus_query_path, witness_plus_plus_query_path, psi_query_path, c_query_path];
+let additional_points: Vec<Vec<F>> = vec![witness_query_vals, witness_plus_query_vals, witness_plus_plus_query_vals, psi_query_vals, c_query_vals];
 
-    (challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points)
+(challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points)
+
 
 }
 
-fn verify(challenges: Vec<F>, roots_fri: Vec<Fp>, roots: Vec<Fp>, paths_fri: Vec<FieldPath>, additional_paths: Vec<Vec<FieldPath>>, points_fri: Vec<F>, additional_points: Vec<Vec<F>>,
+pub fn verify(challenges: Vec<F>, roots_fri: Vec<Fp>, roots: Vec<Fp>, paths_fri: Vec<FieldPath>, additional_paths: Vec<Vec<FieldPath>>, points_fri: Vec<F>, additional_points: Vec<Vec<F>>,
             g: F, s: F, r: F, n: &u64, s_ord: u64, y_start: &F, y_end: &F, l_list: Vec<usize>, rep_param: usize) -> bool {
             
                 // Compute z, alphas and zetas 
@@ -204,14 +203,15 @@ fn verify(challenges: Vec<F>, roots_fri: Vec<Fp>, roots: Vec<Fp>, paths_fri: Vec
             let alpha_1: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, roots[..2].to_vec().clone()).unwrap(), Fp::from(0));
             let alpha_2: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_1.c0]).unwrap(), Fp::from(0));
             let alpha_3: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_2.c0]).unwrap(), Fp::from(0));
+            let alpha_4: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_3.c0]).unwrap(), Fp::from(0));
             let mut zeta_vec: Vec<Fp> = vec![poseidon::CRH::<Fp>::evaluate(&params, vec![z.c0]).unwrap()];
             for _ in 0..4{
                 zeta_vec.push(poseidon::CRH::<Fp>::evaluate(&params, zeta_vec.clone()).unwrap());
             }
             // Check that the FRI queries are correct
-            let (points_first, indices_first) = fri_verify(paths_fri, points_fri.clone(), roots_fri, l_list.clone(), s.clone(), r.clone(), s_ord.clone() as usize, rep_param as u8);
+            let (points_first, indices_first) = fri_verify(paths_fri, points_fri.clone(), roots_fri, l_list.clone(), s.clone(), r.clone(), s_ord.clone(), rep_param as u8);
             // Check that the challenges were computed correctly
-            let E: u64 = 3*(*n) + 13;
+            let E: u64 = 32*n/9;
             let c1: F = initial_challenge(y_start, &challenges[0], &z, n);
             let c2: F = final_challenge(y_end, &challenges[0], &z, n, &g);
             let c3: F = mod_challenge(&challenges[0], &challenges[1], &z, &g, &n);
@@ -219,7 +219,7 @@ fn verify(challenges: Vec<F>, roots_fri: Vec<Fp>, roots: Vec<Fp>, paths_fri: Vec
             
             let asserted_c: F = alpha_1*z.pow(&[E-n-2])*c1 
                                 + alpha_3*z.pow(&[E-n-2])*c2 
-                                + c3
+                                + alpha_4*z.pow(&[E-3*n-13])*c3
                                 + alpha_2*z.pow(&[E-n-5])*c4;
             assert_eq!(asserted_c, challenges[4]);
 
@@ -285,7 +285,7 @@ fn verify(challenges: Vec<F>, roots_fri: Vec<Fp>, roots: Vec<Fp>, paths_fri: Vec
         +F::from(8748000000u128)*(x+y)-
         F::from(157464000000000u128);
 
-        (z-g.pow(&[*n-1]))*eval / (z.pow(&[*n-1])-F::from(1))
+        (z-g.pow(&[*T-1]))*eval / (z.pow(&[*T])-F::from(1))
     }
     //evaluates Phi_2(witness(x), witness_plus(x))
     fn mod_poly_const_eval_at_x(x: &F, witness: &DensePolynomial<F>, g: &F) -> F {
@@ -363,12 +363,13 @@ fn verify(challenges: Vec<F>, roots_fri: Vec<Fp>, roots: Vec<Fp>, paths_fri: Vec
 
     //Returns the composite polynomial
     fn compute_c(c1: DensePolynomial<F>, c2: DensePolynomial<F>, c3: DensePolynomial<F>, c4: DensePolynomial<F>, alphas: &Vec<F>, T: &usize) -> DensePolynomial<F> {
-        let E: usize = 3*T + 13;
+        let E: usize = 32*T/9;
         let deg_1: usize = E-T-2;
         let deg_2: usize = E-T-5;
+        let deg_3: usize = 3*T + 13;
 
         c1.naive_mul(&DensePolynomial{coeffs: vec![vec![F::from(0); deg_1], vec![alphas[0]]].concat()})
-        + c2 
+        + c2.naive_mul(&DensePolynomial{coeffs: vec![vec![F::from(0); deg_3], vec![alphas[3]]].concat()})
         + c3.naive_mul(&DensePolynomial{coeffs: vec![vec![F::from(0); deg_2], vec![alphas[1]]].concat()})
         + c4.naive_mul(&DensePolynomial{coeffs: vec![vec![F::from(0); deg_1], vec![alphas[2]]].concat()})
     }

@@ -6,6 +6,7 @@ use super::{F, FieldMT, poseidon_parameters, FieldPath, solve_linear_system, Fp}
 use ndarray::prelude::*;
 use ndarray::{Array, ArrayView, Axis};
 use ndarray_linalg::*;
+use rayon::prelude::*;
 
 
 // This function executes one folding step in the CSIDH-FRI algorithm
@@ -44,37 +45,32 @@ DensePolynomial { coeffs: final_g }
 }
 
 // Computes the Merkle tree of the folded f on the evaluation domain r<s>
-pub fn round_commit(f_folded: &DensePolynomial<F>, s: &F, r: &F, s_ord: &u8) -> (FieldMT, Fp, Vec<F>) {
+pub fn round_commit(f_folded: &DensePolynomial<F>, s: &F, r: &F, s_ord: &u64) -> (FieldMT, Fp, Vec<F>) {
     let leaf_crh_params = poseidon_parameters();
     let two_to_one_params = leaf_crh_params.clone();
 
-    //let f_folded = fold(f, l, theta);
-    let mut eval_vec: Vec<Vec<Fp>> = Vec::new();
-    let mut points_vec: Vec<F> = Vec::new();
-    for i in 0..*s_ord {
-        let temp: F = f_folded.evaluate(&(r*&s.pow(&[i as u64])));
-        eval_vec.push(vec![temp.c0, temp.c1]);
-        points_vec.push(temp);
-    }
-    // Let k be such that 2^k-1 < s_ord <= 2^k. Fill the 2^k-s_ord last entries of
-    // eval_vec with 0 
-    let k = (((*s_ord as f32).log2()).ceil()) as u8;
-    //println!("k:{:?}", k);
-    //println!("s_ord:{:?}", s_ord);
-    for _ in 0..(2u8.pow(k.into())-s_ord) {
-        eval_vec.push(vec![Fp::from(0),Fp::from(0)]);
-    }
+    let D: Vec<F> = (0..*s_ord).into_par_iter()
+                                .map(|i| r*s.pow([i]))
+                                .collect();
+    let point_vec: Vec<F> =  D.clone().into_par_iter()
+                               .map(|x| f_folded.evaluate(&x))
+                               .collect();
+    let k = (((*s_ord as f32).log2()).ceil()) as u32;
+    let mut eval_vec: Vec<Vec<Fp>> = point_vec.par_iter().map(|x| vec![x.c0, x.c1]).collect();
+    eval_vec =vec![eval_vec, vec![vec![Fp::from(0),Fp::from(0)]; 2u64.pow(k) as usize - *s_ord as usize]].concat();
+    let eval_vec_slice: Vec<&[Fp]> = eval_vec.par_iter().map(|x| x.as_slice()).collect();
+    
     let mtree: FieldMT = FieldMT::new(
         &leaf_crh_params,
         &two_to_one_params,
-        eval_vec.iter().map(|x| x.as_slice()),
+        eval_vec_slice,
     )
     .unwrap();
-    (mtree.clone(), mtree.root(), points_vec)
+    (mtree.clone(), mtree.root(), point_vec)
 }
 
 // Returns (Merkle Trees, Merkle Roots, Evaluations)
-pub fn commit(f: DensePolynomial<F>, l_list: Vec<usize>, mut s: F, mut r: F, mut s_ord: u8) -> (Vec<FieldMT>, Vec<Fp>, Vec<Vec<F>>) {
+pub fn commit(f: DensePolynomial<F>, l_list: Vec<usize>, mut s: F, mut r: F, mut s_ord: u64) -> (Vec<FieldMT>, Vec<Fp>, Vec<Vec<F>>) {
 let mut mtrees: Vec<FieldMT> = Vec::new();
 let mut points: Vec<Vec<F>> = Vec::new();
 let mut roots: Vec<Fp> = Vec::new();
@@ -93,7 +89,7 @@ for i in 0..n_rounds {
     folded_polys.push(fold(folded_polys.last().unwrap(), l_list[i] as u8, theta_vec[i]));
     r = r.pow(&[l_list[i] as u64]);
     s = s.pow(&[l_list[i] as u64]);
-    s_ord = s_ord/(l_list[i] as u8);
+    s_ord = s_ord/(l_list[i] as u64);
    let (m, r, p) = round_commit(folded_polys.last().unwrap(), &s, &r, &s_ord);
     roots.push(r);
     mtrees.push(m);
@@ -147,7 +143,7 @@ for _ in 0..alpha {
 (paths, queried_points, indices_first)
 }
 
-pub fn fri_prove(f: DensePolynomial<F>, l_list: Vec<usize>, s: F, r: F, s_ord: u8, alpha: usize) 
+pub fn fri_prove(f: DensePolynomial<F>, l_list: Vec<usize>, s: F, r: F, s_ord: u64, alpha: usize) 
 -> (Vec<FieldPath>, Vec<F>, Vec<Fp>, Vec<usize>) {
     let (mtrees, mroots, evals) = commit(f, l_list.clone(), s, r, s_ord.clone());
 
@@ -179,7 +175,7 @@ y == y_supposedly
 }
 
 //Returns indices to query for PolyIOP together with the corresponding points 
-pub fn fri_verify(mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: Vec<Fp>, l_list: Vec<usize>, s: F, r: F, s_ord: usize, alpha: u8) 
+pub fn fri_verify(mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: Vec<Fp>, l_list: Vec<usize>, s: F, r: F, s_ord: u64, alpha: u8) 
 -> (Vec<F>, Vec<usize>) {
     let leaf_crh_params = poseidon_parameters();
     let two_to_one_params = leaf_crh_params.clone();
@@ -188,18 +184,18 @@ pub fn fri_verify(mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: 
     let mut t_vals: Vec<F> = Vec::new();
     let mut s_vals: Vec<F> = Vec::new();
     let mut r_vals: Vec<F> = Vec::new();
-    let mut s_ord_vals: Vec<usize> = Vec::new();
+    let mut s_ord_vals: Vec<u64> = Vec::new();
 
     s_vals.push(s); s_ord_vals.push(s_ord); r_vals.push(r);
     for (i, l) in l_list.as_slice().iter().enumerate(){
-        let t_ord = s_ord/l;
-        t_vals.push(s.pow(&[t_ord as u64]));
+        let t_ord = s_ord/(*l as u64);
+        t_vals.push(s.pow(&[t_ord]));
         //assert_eq!(s.pow(&[t_ord as u64]), F::from(1));
         //assert_eq!(s, F::from(1));
         
         r_vals.push(r_vals[i].pow(&[*l as u64]));
         s_vals.push(s_vals[i].pow(&[*l as u64]));
-        s_ord_vals.push(s_ord_vals[i]/l);
+        s_ord_vals.push(s_ord_vals[i]/(*l as u64));
     }
     // Define all the thetas using Fiat-Shamir
     let mut theta_vec: Vec<F> = Vec::new();

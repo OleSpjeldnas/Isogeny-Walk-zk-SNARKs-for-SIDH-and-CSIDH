@@ -11,7 +11,7 @@ use matrix::*;
 pub mod csidh_fri;
 pub mod get_roots;
 pub mod isogeny_prove;
-use isogeny_prove::*;
+use isogeny_prove::{prove, verify};
 use csidh_fri::*;
 use ark_ff::Field;
 use std::hash::{Hash, Hasher};
@@ -25,31 +25,65 @@ use std::io::{stdin, Write};
 pub mod merkle;
 use merkle::{FieldMT, poseidon_parameters, FieldPath};
 use get_roots::*;
+use std::time::{Duration, Instant};
 
 fn main() {
+    // l_vec contains all the folding factors
+    let l_list: Vec<usize> = vec![vec![3; 4], vec![4; 2], vec![2]].concat();
+    let mut s: F = MULT_GEN;
+    
+    for i in 0..130 {
+        s = s.pow(&[3]);
+    }
+    let g: F = s.clone();
+    for i in 0..212 {
+        s = s.pow(&[2]);
+    }
+    let r: F = F::new(Fp::from(5), Fp::from(3));
     //let order_group: u64 = 2u64.pow(6);
     //let w = FFT_GEN.pow(&[order_group]).inverse().unwrap();
     // Witness polynomial
-    let mut coeffs: Vec<F> = lines_from_file_2("new_coeffs.txt").unwrap();
-    for _ in 729..1024 {
-        coeffs.push(F::default());
+    let witness: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("new_coeffs.txt").unwrap() };
+    // Witness(x+1)
+    let witness_plus: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("coeffs_plus.txt").unwrap() };
+    // Witness(x+2)
+    let witness_plus_plus: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("coeffs_plus_plus.txt").unwrap() };
+    // psi
+    let psi: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("psi_coeffs.txt").unwrap() };
+    //for _ in 729..1024 {
+    //    coeffs.push(F::default());
+    //}
+    let y_start: F = witness.evaluate(&F::from(1));
+    let y_end: F = witness.evaluate(&g.pow(&[728]));
+    let s_ord: u64 = 729*32;
+    let rep_param: usize = 3;
+    let now = Instant::now();
+    let (challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points) = prove(witness, witness_plus, witness_plus_plus, psi, g, s, r, s_ord, &y_start, &y_end, l_list.clone(), rep_param);
+    println!("Prover Time: {}", now.elapsed().as_secs());
+    let now = Instant::now();
+    let b = verify(challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points, g, s, r, &729, s_ord, &y_start, &y_end, l_list, rep_param);
+    println!("Verifier Time: {}", now.elapsed().as_millis());
+    if b {
+        println!("Verification successful");
+    } else {
+        println!("Verification failed");
     }
-    let witness: DensePolynomial<F> = DensePolynomial { coeffs: coeffs.clone() };
-    let mut eval_vec: Vec<F> = Vec::new();
-    let w = FFT_GEN.pow(&[2u64.pow(6)]);
-    for i in 0..1024 {
-        eval_vec.push(witness.evaluate(&w.pow(&[i as u64])));
-    }
-    let check = fft(&coeffs);
-    let ver = ifft(&check);
-    let mut ver2: Vec<F> = Vec::new();
-    let n: u64 = check.len() as u64;
-    let n_inv: F = F::from(1024).inverse().unwrap();
-    for coeff in ver.iter() {
-        ver2.push(*coeff* n_inv);
-    }
+    return;
+    //let mut eval_vec: Vec<F> = Vec::new();
+    //let w = FFT_GEN.pow(&[2u64.pow(6)]);
+    //for i in 0..1024 {
+    //    eval_vec.push(witness.evaluate(&w.pow(&[i as u64])));
+    //}
+    //let check = fft(&coeffs);
+    //let ver = ifft(&check);
+    //let mut ver2: Vec<F> = Vec::new();
+    //let n: u64 = check.len() as u64;
+    //let n_inv: F = F::from(1024).inverse().unwrap();
+    //for coeff in ver.iter() {
+    //    ver2.push(*coeff* n_inv);
+    //}
     
-    assert_eq!(coeffs, ver2);
+    //assert_eq!(coeffs, ver2);
     return;
     // Polynomial p s.t. p(s^i) = witness(s^(i+1))
     let coeffs_plus: Vec<F> = lines_from_file_2("coeffs_plus.txt").unwrap();
@@ -257,7 +291,9 @@ fn lines_from_file_2(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
 }
 // This element has order 2^16
 const FFT_GEN: F = F::new(MontFp!("17231939763216297887217622266809272467545088513556272765685947455324509609957290372982961616729012186542372231626409308935024145447"), MontFp!("14794844963276765294078403131215971792257250447333909245841623048180831260548488349233598857775988700515612163307689388891415390090"));
-
+// This is the multiplicative generator of the field ^(l-2)
+// It has order 2^217*3^136
+const MULT_GEN: F = F::new(MontFp!("4887884732269044310381829002291498723817156048752319302265161467241044247866395345194043334365723689179743805338576987868462946714"), MontFp!("9775769464538088620763658004582997447634312097504638604530322934482088495732790690388086668731447378359487610677153975736925893426"));
 // This function computes the FFT of a polynomial over the finite field F
 fn fft(a: &[F]) -> Vec<F> {
     let n = a.len();
