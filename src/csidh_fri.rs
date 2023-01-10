@@ -21,10 +21,10 @@ let mut g: Vec<F> = vec![F::from(0); d];
 
 for (i, coeff) in f.coeffs.iter().enumerate() {
     //println!("Coeff: {}", coeff);
-   if (j > i as u8) && ((j - i as u8) % l == 0){
+   if (j as u64 > i as u64) && ((j as u64 - i as u64) % l as u64 == 0){
         g[i]+= coeff*(&th);
    }
-    else if (i as u8>= j) && ((i as u8 - j) % l == 0) {
+    else if (i as u64>= j as u64) && ((i as u64 - j as u64) % l as u64 == 0) {
         g[(i-j as usize)/(l as usize)]+= coeff*(&th);
     }
    }
@@ -188,8 +188,7 @@ pub fn fri_verify(mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: 
 
     s_vals.push(s); s_ord_vals.push(s_ord); r_vals.push(r);
     for (i, l) in l_list.as_slice().iter().enumerate(){
-        let t_ord = s_ord/(*l as u64);
-        t_vals.push(s.pow(&[t_ord]));
+        t_vals.push(s.pow(&[s_ord/(*l as u64)]));
         //assert_eq!(s.pow(&[t_ord as u64]), F::from(1));
         //assert_eq!(s, F::from(1));
         

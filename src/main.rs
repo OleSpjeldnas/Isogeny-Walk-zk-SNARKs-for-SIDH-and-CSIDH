@@ -15,29 +15,38 @@ use isogeny_prove::{prove, verify};
 use csidh_fri::*;
 use ark_ff::Field;
 use std::hash::{Hash, Hasher};
+use std::ops::Div;
 use ark_crypto_primitives::CRHScheme;
 use ark_sponge::poseidon::PoseidonConfig;
 use ark_crypto_primitives::crh::poseidon;
 use ark_ff::UniformRand;
 use std::fs::File;
+use ark_std::test_rng;
 use std::io::{stdin, Write};
 //use ark_crypto_primitives::*;
 pub mod merkle;
 use merkle::{FieldMT, poseidon_parameters, FieldPath};
 use get_roots::*;
 use std::time::{Duration, Instant};
-
+use crate::isogeny_prove::*;
 fn main() {
     // l_vec contains all the folding factors
     let l_list: Vec<usize> = vec![vec![3; 4], vec![4; 2], vec![2]].concat();
     let mut s: F = MULT_GEN;
     
-    for i in 0..130 {
+    
+    for _ in 0..210 {
+        s = s.pow(&[2]);
+    }
+    for _ in 0..131 {
         s = s.pow(&[3]);
     }
-    let g: F = s.clone();
-    for i in 0..212 {
-        s = s.pow(&[2]);
+    let mut g: F = s.clone();
+    for _ in 0..6 {
+        g = g.pow(&[2]);
+    }
+    for _ in 0..2 {
+        s = s.pow(&[3]);
     }
     let r: F = F::new(Fp::from(5), Fp::from(3));
     //let order_group: u64 = 2u64.pow(6);
@@ -45,20 +54,58 @@ fn main() {
     // Witness polynomial
     let witness: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("new_coeffs.txt").unwrap() };
     // Witness(x+1)
-    let witness_plus: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("coeffs_plus.txt").unwrap() };
-    // Witness(x+2)
-    let witness_plus_plus: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("coeffs_plus_plus.txt").unwrap() };
-    // psi
+    let n = witness.coeffs.len();
+
+    let mut rng = test_rng();
+    let a: F = F::rand(&mut rng);
+    let b: F = F::rand(&mut rng);
+    let c: F = F::rand(&mut rng);
+    let blinding_factor: DensePolynomial<F> = DensePolynomial { coeffs: vec![a, b, c] }
+                                              .naive_mul(&DensePolynomial{coeffs: vec![vec![-F::from(1)], vec![F::from(0); n-1], vec![F::from(1)]].concat()});
+    let b_witness: DensePolynomial<F> =  witness.clone() + blinding_factor.clone();
+    
+    
+        let b_witness_plus:  DensePolynomial<F> = DensePolynomial{coeffs: b_witness.coeffs.par_iter()
+            .enumerate()
+            .map(|(i, coeff)| coeff*g.pow(&[i as u64]))
+            .collect()};
+        let b_witness_plus_plus: DensePolynomial<F> = DensePolynomial{coeffs: b_witness_plus.coeffs.par_iter()
+            .enumerate()
+            .map(|(i, coeff)| coeff*g.pow(&[i as u64]))
+            .collect()};
+        
+            // psi
     let psi: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("psi_coeffs.txt").unwrap() };
     //for _ in 729..1024 {
     //    coeffs.push(F::default());
     //}
-    let y_start: F = witness.evaluate(&F::from(1));
-    let y_end: F = witness.evaluate(&g.pow(&[728]));
-    let s_ord: u64 = 729*32;
-    let rep_param: usize = 3;
+    //assert_eq!(witness.evaluate(&(g*g*r)), witness_plus_plus.evaluate(&r));
+    let y_start: F = b_witness.evaluate(&F::from(1));
+    let y_end: F = b_witness.evaluate(&g.pow(&[728]));
+    //assert_eq!(psi_challenge(&b_witness.evaluate(&r), &b_witness_plus_plus.evaluate(&r), &psi.evaluate(&r), &r, &(n as u64), &g), test.evaluate(&r));
+    
+    //let test: DensePolynomial<F> = mod_poly_poly(&b_witness.clone(), &b_witness_plus.clone(), n, g);
+    //for i in 0..729 {
+    //    if test.evaluate(&g.pow(&[i as u64])) != F::from(0) {
+           // if mod_poly(b_witness.evaluate(&g.pow(&[i as u64])), b_witness_plus.evaluate(&g.pow(&[i as u64]))) != F::from(0) {
+    //        println!("{}", i);
+    //    }
+    //}
+    //return;
+    //let check = test.div(&DensePolynomial{ coeffs: [vec![-F::from(1)], vec![F::from(0); n-1], vec![F::from(1)]].concat()});
+    //assert_eq!(check.evaluate(&r), test.evaluate(&r)/(r.pow(&[n as u64]) - F::from(1)));
+    //return;
+    //let test_compare: F = mod_challenge( &b_witness.evaluate(&r), &b_witness.evaluate(&(g*r)),&r, &g, &(n as u64 ));
+    //assert_eq!(test.evaluate(&r), test_compare);
+    //return;
+    let s_ord: u64 = 81*64;
+    let rep_param: usize = 1;
+    //let (paths, points, mroots, indices) = fri_prove(witness, l_list.clone(), s, r, s_ord, rep_param.clone());
+    //let (b, xcc) = fri_verify(paths, points, mroots,  l_list, s, r, s_ord, rep_param as u8);
+    //println!("Verification successful");
+    //return;
     let now = Instant::now();
-    let (challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points) = prove(witness, witness_plus, witness_plus_plus, psi, g, s, r, s_ord, &y_start, &y_end, l_list.clone(), rep_param);
+    let (challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points) = prove(witness, psi, g.clone(), s.clone(), r, s_ord, &y_start, &y_end, l_list.clone(), rep_param);
     println!("Prover Time: {}", now.elapsed().as_secs());
     let now = Instant::now();
     let b = verify(challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points, g, s, r, &729, s_ord, &y_start, &y_end, l_list, rep_param);
@@ -69,98 +116,10 @@ fn main() {
         println!("Verification failed");
     }
     return;
-    //let mut eval_vec: Vec<F> = Vec::new();
-    //let w = FFT_GEN.pow(&[2u64.pow(6)]);
-    //for i in 0..1024 {
-    //    eval_vec.push(witness.evaluate(&w.pow(&[i as u64])));
-    //}
-    //let check = fft(&coeffs);
-    //let ver = ifft(&check);
-    //let mut ver2: Vec<F> = Vec::new();
-    //let n: u64 = check.len() as u64;
-    //let n_inv: F = F::from(1024).inverse().unwrap();
-    //for coeff in ver.iter() {
-    //    ver2.push(*coeff* n_inv);
-    //}
-    
-    //assert_eq!(coeffs, ver2);
-    return;
-    // Polynomial p s.t. p(s^i) = witness(s^(i+1))
-    let coeffs_plus: Vec<F> = lines_from_file_2("coeffs_plus.txt").unwrap();
-    let witness_plus: DensePolynomial<F> = DensePolynomial { coeffs: coeffs_plus.clone() };
-    //let test = fft_multiply(&coeffs, &coeffs_plus);
-    //let test_poly = DensePolynomial { coeffs: test.clone() };
-
-    let test_point: F = F::from(243);
-    //let test_1: Vec<F> = vec![F::from(2), F::from(3), F::from(1)];
-    //let test_2: Vec<F> = vec![F::from(1), F::from(2), F::from(1)];
-    //let poly_mult = tom_cook(&coeffs, &coeffs_plus);
-    //let poly_mult2 = toom_cook_mul(&coeffs, &coeffs_plus);
-    //let test_poly = DensePolynomial { coeffs: poly_mult2.clone() };
-    //let poly_test = witness.naive_mul(&witness_plus);
-    //let t = naive_mul2(&coeffs, &coeffs_plus);
-    //assert_eq!(poly_mult2, t);
-    //assert_eq!(witness.naive_mul(&witness_plus).coeffs[0], test[0]);
-    //assert_eq!(test_poly.evaluate(&test_point), witness.evaluate(&test_point)*(&witness_plus.evaluate(&test_point)));
-    return;
-    //let karatsuba_test = karatsuba(&coeffs, &coeffs_plus);
-    //let c_2 = mod_poly_quotient(witness.clone(), witness_plus.clone());
-    return;
-    let gen: F = F::new(MontFp!("12506453529958197004077348547101724167733006220309459995744807787144199909522473787798149509471425651348760555246425049364872841517"), MontFp!("21367825699298292014944120575290706677154228414033088926289743967671269667328826095717704544576378050739679286210174567998522892433"));
-    for i in 0..728 {
-        println!("i:{}", i);
-        assert_eq!(mod_poly(witness.evaluate(&gen.pow(&[i as u64])),witness_plus.evaluate(&gen.pow(&[i as u64]))), F::from(0));
-    }
-    return;
-
-    // 2 + x + 4x^2 + 6x^3 + 2x^4 + 111x^5 + 75x^6 + 5x^7 + 56x^8
-    let poly = DensePolynomial {
-        coeffs: vec![
-            F::from(2),
-            F::from(1),
-            F::from(4),
-            F::from(6),
-            F::from(2),
-            F::from(111),
-            F::from(75),
-            F::from(5),
-            F::from(56)
-        ]
-    };
-let l_vec: Vec<usize> = vec![2,3,2];
-let r: F = F::from(3);
-let s_ord: u8 = 72;
-
-//let mtrees = commit(poly, l_vec, s, r, s_ord);
-//let mut mat: Array2<F> = Array::zeros((0, 10));
-//let relevant_primes: Vec<u64> = vec![3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311, 313, 317, 331, 337, 347, 349, 353, 359, 367, 373, 587];
-//let relevant_primes: Vec<u64> = vec![4, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311, 313, 317, 331, 337, 347, 349, 353, 359, 367, 373, 587];
-//let tt: Vec<u64> = vec![2,5,6];
-//let gen = raise_to_power(s, 2u64, 213);
-//let gen3 = raise_to_power(gen, 3u64, 135);
-//let (mt, f1, )
-let f1 = fold(&poly, 2, F::from(2));
-//let (mt1, r1, eval1) = round_commit(&poly, &gen3, &r, &s_ord);
-//let (mt2, r2, eval2) = round_commit(&f1, &gen3.pow(&[2]), &r.pow(&[2]), &(s_ord/2));
-let index: usize = 5;
-//println!("length points1:{:?}", eval1.len());
-//println!("length points2:{:?}", eval2.len());
-//let mut points: Vec<F> = Vec::new();
-//points.push(eval2[5]);
-//points.push(eval1[5]);
-//points.push(eval1[17]);
-//let t: F = gen3.pow(&[12]);
-//assert_eq!(points[0], f1.evaluate(&(r.pow(&[2])*gen3.pow(&[10]))));
-//assert_eq!(points[1], poly.evaluate(&(r*gen3.pow(&[5]))));
-//assert_eq!(points[2], poly.evaluate(&(r*gen3.pow(&[5])*t)));
-//println!("length points2:{:?}", eval2.len());
-//let (paths, points, roots) = prove(poly, l_vec.clone(), s, r, 72, 3);
-//let b = verify(paths, points, roots, l_vec, s, r, 72, 3);
-
-
+}
 //println!("Hello, world!, {:?}",b);
 
-}
+
 use std::collections::hash_map::DefaultHasher;
 fn calculate_hash<T: Hash>(t: &T, n: u64) -> u64 {
     let mut s = DefaultHasher::new();
@@ -175,13 +134,6 @@ fn raise_to_power(x: F, v: u64, n: u8) -> F {
 s
 }
 
-fn mod_poly(x: F, y: F) -> F {
-    x*x*x+y*y*y-x*x*y*y+F::from(1488u128)
-    *(x*x*y+y*y*x)-F::from(162000u128)*
-    (x*x+y*y)+F::from(40773375u128)*x*y
-    +F::from(8748000000u128)*(x+y)-
-    F::from(157464000000000u128)
-}
 
 fn write_to_file(interp_poly: &Vec<F>) -> std::io::Result<()> {
     let mut file = File::create("interp_poly_coeffs.txt")?;
@@ -295,86 +247,33 @@ const FFT_GEN: F = F::new(MontFp!("172319397632162978872176222668092724675450885
 // It has order 2^217*3^136
 const MULT_GEN: F = F::new(MontFp!("4887884732269044310381829002291498723817156048752319302265161467241044247866395345194043334365723689179743805338576987868462946714"), MontFp!("9775769464538088620763658004582997447634312097504638604530322934482088495732790690388086668731447378359487610677153975736925893426"));
 // This function computes the FFT of a polynomial over the finite field F
-fn fft(a: &[F]) -> Vec<F> {
-    let n = a.len();
-    //println!("h_hat: {}", n);
-    if n == 1 {
-        return a.to_vec();
-    }
-    let mut a0 = vec![F::from(0); n/2];
-    let mut a1 = vec![F::from(0); n/2];
-    for i in 0..n/2 {
-        a0[i] = a[i*2];
-        a1[i] = a[i*2+1];
-    }
-    let y0 = fft(&a0);
-    let y1 = fft(&a1);
-    let mut y = vec![F::from(0); n];
-    let order_group: u64 = 2u64.pow(16) / (n as u64);
-    let mut w: F = FFT_GEN.pow(&[order_group]);
-    let mut wk = F::from(1);
-    for k in 0..n/2 {
-        y[k] = y0[k] + wk * y1[k];
-        y[k+n/2] = y0[k] - wk * y1[k];
-        wk = wk * w;
-    }
-    y
+use rayon::{prelude::*, join};
+
+use crate::isogeny_prove::{initial_poly, initial_challenge};
+
+use std::ops::Sub;
+fn mod_poly_poly1(p: &DensePolynomial<F>, q: &DensePolynomial<F>, T: usize, g: F) -> DensePolynomial<F> {
+    let p_squared: DensePolynomial<F> = p.naive_mul(p);
+    let q_squared: DensePolynomial<F> = q.naive_mul(q);
+    let p_cubed: DensePolynomial<F> = p_squared.naive_mul(p);
+    let q_cubed: DensePolynomial<F> = q_squared.naive_mul(q);
+    let p_squared_q: DensePolynomial<F> = p_squared.naive_mul(q);
+    let q_squared_p: DensePolynomial<F> = q_squared.naive_mul(p);
+    let pq: DensePolynomial<F> = p.naive_mul(q);
+
+    let temp: DensePolynomial<F> = p_cubed+q_cubed.sub(&p_squared_q.naive_mul(q))
+                                    +DensePolynomial{coeffs: vec![F::from(1488u128)]}.naive_mul(&(p_squared_q+q_squared_p))
+                                    +DensePolynomial{coeffs: vec![-F::from(162000u128)]}.naive_mul(&(p_squared+q_squared))
+                                    +DensePolynomial{coeffs: vec![F::from(40773375u128)]}.naive_mul(&pq)
+                                    +DensePolynomial{coeffs: vec![F::from(8748000000u128)]}.naive_mul(&(p+q))
+                                    +DensePolynomial{coeffs: vec![-F::from(157464000000000u128)]};
+
+    temp.naive_mul(&DensePolynomial{coeffs: vec![-g.pow(&[T as u64-1]), F::from(1)]})
 }
-
-fn ifft(a: &[F]) -> Vec<F> {
-    let n = a.len();
-    if n == 1 {
-        return a.to_vec();
-    }
-    let mut a0 = vec![F::from(0); n/2];
-    let mut a1 = vec![F::from(0); n/2];
-    for i in 0..n/2 {
-        a0[i] = a[i*2];
-        a1[i] = a[i*2+1];
-    }
-    let y0 = ifft(&a0);
-    let y1 = ifft(&a1);
-    let mut y = vec![F::from(0); n];
-    let order_group: u64 = 2u64.pow(16) / (n as u64);
-    let w = FFT_GEN.pow(&[order_group]).inverse().unwrap();
-    let mut wk = F::from(1);
-    for k in 0..n/2 {
-        y[k] = y0[k] + wk * y1[k];
-        y[k+n/2] = y0[k] - wk * y1[k];
-        wk = wk * w;
-    }
-    y
-}
-
-// Multiply two polynomials f and g
-fn fft_multiply(f: &[F], g: &[F]) -> Vec<F> {
-    let m = f.len();
-    let n = g.len();
-    let mut f = f.to_vec();
-    let mut g = g.to_vec();
-    // Pad the input polynomials with zeros to the nearest power of 2
-
-    
-    let k1 = (((m as f32).log2()).ceil()) as u8 + 1;
-    println!("len_before: {}", f.len());
-    for _ in 0..2usize.pow(k1 as u32) - m {
-        f.push(F::from(0));
-    }
-    for _ in 0..2usize.pow(k1 as u32) - n {
-        g.push(F::from(0));
-    }
-    //f.resize(2usize.pow(k1 as u32), F::from(0));
-    //g.resize(2usize.pow(k2 as u32), F::from(0));
-    // Compute the FFTs of f and g
-    let f_hat = fft(&f);
-    let g_hat = fft(&g);
-    // Multiply the FFTs pointwise
-    
-    let h_hat: Vec<F> = f_hat.iter().zip(g_hat.iter()).map(|(f, g)| *f * *g).collect();
-    // Compute the inverse FFT of the result
-    println!("len_after: {}", h_hat.len());
-    
-    let h = ifft(&h_hat);
-    // Truncate the result to the correct degree
-    h[..m+n-1].to_vec()
+fn mod_poly(x: F, y: F) -> F {
+    x*x*x+y*y*y-x*x*y*y+F::from(1488u128)
+    *(x*x*y+y*y*x)-F::from(162000u128)*
+    (x*x+y*y)+F::from(40773375u128)*x*y
+    +F::from(8748000000u128)*(x+y)-
+    F::from(157464000000000u128)
 }
