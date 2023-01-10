@@ -151,7 +151,7 @@ println!("Checkpoint 1");
                                 .div(&DensePolynomial { coeffs: vec![-z, F::from(1)]});
 
 
-    let (paths_fri, points_fri, roots_fri, indices) = fri_prove(p, l_list, s, r, s_ord, rep_param);
+    let (paths_fri, points_fri, roots_fri, indices) = fri_prove(p.clone(), l_list, s, r, s_ord, rep_param);
     
 println!("Checkpoint 4");
 let mut witness_query_vals: Vec<F> = vec![];
@@ -165,26 +165,20 @@ let mut witness_plus_query_path: Vec<FieldPath> = vec![];
 let mut witness_plus_plus_query_path: Vec<FieldPath> = vec![];
 let mut psi_query_path: Vec<FieldPath> = vec![];
 let mut c_query_path: Vec<FieldPath> = vec![];
-println!("Index 0: {}", indices[0]);
 let plus_index: usize = (s_ord as usize)/n;
 for index in indices.iter() {
     let z_ind: usize = *index;
-    let gz_ind: usize = (z_ind + plus_index) % (s_ord as usize);
-    let ggz_ind: usize = (z_ind + 2*plus_index) % (s_ord as usize);
+    let x_0: F = r*s.pow(&[*index as u64]);
     witness_query_vals.push(witness_evals[z_ind]);
-    witness_plus_query_vals.push(witness_evals[gz_ind]);
-    witness_plus_plus_query_vals.push(witness_evals[ggz_ind]);
     psi_query_vals.push(psi_evals[z_ind]);
     c_query_vals.push(c_evals[z_ind]);
 
     witness_query_path.push(witness_mtree.generate_proof(z_ind).unwrap());
-    witness_plus_query_path.push(witness_mtree.generate_proof(gz_ind).unwrap());
-    witness_plus_plus_query_path.push(witness_mtree.generate_proof(ggz_ind).unwrap());
     psi_query_path.push(psi_mtree.generate_proof(z_ind).unwrap());
     c_query_path.push(c_mtree.generate_proof(z_ind).unwrap());
 }
-let additional_paths: Vec<Vec<FieldPath>> = vec![witness_query_path, witness_plus_query_path, witness_plus_plus_query_path, psi_query_path, c_query_path];
-let additional_points: Vec<Vec<F>> = vec![witness_query_vals, witness_plus_query_vals, witness_plus_plus_query_vals, psi_query_vals, c_query_vals];
+let additional_paths: Vec<Vec<FieldPath>> = vec![witness_query_path, psi_query_path, c_query_path];
+let additional_points: Vec<Vec<F>> = vec![witness_query_vals, psi_query_vals, c_query_vals];
 
 (challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points)
 
@@ -223,19 +217,18 @@ pub fn verify(challenges: Vec<F>, roots_fri: Vec<Fp>, roots: Vec<Fp>, paths_fri:
                                 + alpha_3*z.pow(&[E-n-5])*c3
                                 + alpha_4*z.pow(&[E-n-2])*c4;
             assert_eq!(asserted_c, challenges[4]);
-
-            println!("Index 0: {}", indices_first[0]);
+            //println!("Checkpoint 6: {}", points_first[0]);
             // Check consistency between P(x) in FRI and the committed-to polynomials
             for (i, index) in indices_first.iter().enumerate() {
                 let x_0: F = r*s.pow(&[*index as u64]);
+                
                 let witness_val: F = additional_points[0][i];
-                let witness_plus_val: F = additional_points[1][i];
-                let witness_plus_plus_val: F = additional_points[2][i];
-                let psi_val: F = additional_points[3][i];
-                let c_val: F = additional_points[4][i];
+                //println!("Index: {}", witness_val);
+                let psi_val: F = additional_points[1][i];
+                let c_val: F = additional_points[2][i];
                 let asserted_p: F = F::new(zeta_vec[0], Fp::from(0))*x_0.pow(&[E-n])*(witness_val-challenges[0])/(x_0 - z)
-                                    + F::new(zeta_vec[1], Fp::from(0))*x_0.pow(&[E-n])*(witness_plus_val-challenges[1])/(x_0 - gz)
-                                    + F::new(zeta_vec[2], Fp::from(0))*x_0.pow(&[E-n])*(witness_plus_plus_val-challenges[2])/(x_0 - ggz)
+                                    + F::new(zeta_vec[1], Fp::from(0))*x_0.pow(&[E-n])*(witness_val-challenges[1])/(x_0 - gz)
+                                    + F::new(zeta_vec[2], Fp::from(0))*x_0.pow(&[E-n])*(witness_val-challenges[2])/(x_0 - ggz)
                                     + F::new(zeta_vec[3], Fp::from(0))*x_0.pow(&[E-n-1])*(psi_val-challenges[3])/(x_0 - z)
                                     + F::new(zeta_vec[4], Fp::from(0))*(c_val-challenges[4])/(x_0 - z);
                 assert_eq!(asserted_p, points_first[i]);

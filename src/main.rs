@@ -31,22 +31,19 @@ use std::time::{Duration, Instant};
 use crate::isogeny_prove::*;
 fn main() {
     // l_vec contains all the folding factors
-    let l_list: Vec<usize> = vec![vec![3; 4], vec![4; 2], vec![2]].concat();
+    let l_list: Vec<usize> = vec![vec![3; 6], vec![4]].concat();
     let mut s: F = MULT_GEN;
     
     
-    for _ in 0..210 {
+    for _ in 0..213 {
         s = s.pow(&[2]);
     }
     for _ in 0..131 {
         s = s.pow(&[3]);
     }
     let mut g: F = s.clone();
-    for _ in 0..6 {
+    for _ in 0..3 {
         g = g.pow(&[2]);
-    }
-    for _ in 0..2 {
-        s = s.pow(&[3]);
     }
     let r: F = F::new(Fp::from(5), Fp::from(3));
     //let order_group: u64 = 2u64.pow(6);
@@ -55,6 +52,7 @@ fn main() {
     let witness: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("new_coeffs.txt").unwrap() };
     // Witness(x+1)
     let n = witness.coeffs.len();
+
 
     let mut rng = test_rng();
     let a: F = F::rand(&mut rng);
@@ -65,14 +63,14 @@ fn main() {
     let b_witness: DensePolynomial<F> =  witness.clone() + blinding_factor.clone();
     
     
-        let b_witness_plus:  DensePolynomial<F> = DensePolynomial{coeffs: b_witness.coeffs.par_iter()
-            .enumerate()
-            .map(|(i, coeff)| coeff*g.pow(&[i as u64]))
-            .collect()};
-        let b_witness_plus_plus: DensePolynomial<F> = DensePolynomial{coeffs: b_witness_plus.coeffs.par_iter()
-            .enumerate()
-            .map(|(i, coeff)| coeff*g.pow(&[i as u64]))
-            .collect()};
+    let b_witness_plus:  DensePolynomial<F> = DensePolynomial{coeffs: b_witness.coeffs.par_iter()
+        .enumerate()
+        .map(|(i, coeff)| coeff*g.pow(&[i as u64]))
+        .collect()};
+    let b_witness_plus_plus: DensePolynomial<F> = DensePolynomial{coeffs: b_witness_plus.coeffs.par_iter()
+        .enumerate()
+        .map(|(i, coeff)| coeff*g.pow(&[i as u64]))
+        .collect()};
         
             // psi
     let psi: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("psi_coeffs.txt").unwrap() };
@@ -82,6 +80,7 @@ fn main() {
     //assert_eq!(witness.evaluate(&(g*g*r)), witness_plus_plus.evaluate(&r));
     let y_start: F = b_witness.evaluate(&F::from(1));
     let y_end: F = b_witness.evaluate(&g.pow(&[728]));
+    
     //assert_eq!(psi_challenge(&b_witness.evaluate(&r), &b_witness_plus_plus.evaluate(&r), &psi.evaluate(&r), &r, &(n as u64), &g), test.evaluate(&r));
     
     //let test: DensePolynomial<F> = mod_poly_poly(&b_witness.clone(), &b_witness_plus.clone(), n, g);
@@ -98,7 +97,10 @@ fn main() {
     //let test_compare: F = mod_challenge( &b_witness.evaluate(&r), &b_witness.evaluate(&(g*r)),&r, &g, &(n as u64 ));
     //assert_eq!(test.evaluate(&r), test_compare);
     //return;
-    let s_ord: u64 = 81*64;
+    let s_ord: u64 = 729*8;
+    //let g_supposed: F = s.pow(&[s_ord/(n as u64)]);
+    //assert_eq!(g, g_supposed);
+    //return;
     let rep_param: usize = 1;
     //let (paths, points, mroots, indices) = fri_prove(witness, l_list.clone(), s, r, s_ord, rep_param.clone());
     //let (b, xcc) = fri_verify(paths, points, mroots,  l_list, s, r, s_ord, rep_param as u8);

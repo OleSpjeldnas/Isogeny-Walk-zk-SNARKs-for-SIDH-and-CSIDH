@@ -2,6 +2,7 @@ use ark_poly::{univariate::DensePolynomial, Polynomial};
 use ark_ff::Field;
 use ark_crypto_primitives::{CRHScheme, MerkleTree};
 use ark_crypto_primitives::crh::poseidon;
+use ark_std::rand::seq::index;
 use super::{F, FieldMT, poseidon_parameters, FieldPath, solve_linear_system, Fp};
 use ndarray::prelude::*;
 use ndarray::{Array, ArrayView, Axis};
@@ -148,7 +149,7 @@ pub fn fri_prove(f: DensePolynomial<F>, l_list: Vec<usize>, s: F, r: F, s_ord: u
     let (mtrees, mroots, evals) = commit(f, l_list.clone(), s, r, s_ord.clone());
 
     let (paths, points, indices) = query(mtrees, evals, l_list, s_ord as usize, alpha);
-
+   
     (paths, points, mroots, indices)
 }  
 
@@ -170,7 +171,7 @@ let mut y_supposedly: F = F::from(0);
 for (i, val) in g_vec.iter().enumerate() {
     y_supposedly += theta.pow(&[i as u64])*val;
 }
-println!("Res: {:?}", y == y_supposedly);
+//println!("Res: {:?}", y == y_supposedly);
 y == y_supposedly
 }
 
@@ -179,8 +180,7 @@ pub fn fri_verify(mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: 
 -> (Vec<F>, Vec<usize>) {
     let leaf_crh_params = poseidon_parameters();
     let two_to_one_params = leaf_crh_params.clone();
-    //let n = l_list.len();
-
+    
     let mut t_vals: Vec<F> = Vec::new();
     let mut s_vals: Vec<F> = Vec::new();
     let mut r_vals: Vec<F> = Vec::new();
@@ -189,8 +189,6 @@ pub fn fri_verify(mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: 
     s_vals.push(s); s_ord_vals.push(s_ord); r_vals.push(r);
     for (i, l) in l_list.as_slice().iter().enumerate(){
         t_vals.push(s.pow(&[s_ord/(*l as u64)]));
-        //assert_eq!(s.pow(&[t_ord as u64]), F::from(1));
-        //assert_eq!(s, F::from(1));
         
         r_vals.push(r_vals[i].pow(&[*l as u64]));
         s_vals.push(s_vals[i].pow(&[*l as u64]));
@@ -207,13 +205,9 @@ pub fn fri_verify(mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: 
     }
     let mut indices: Vec<u64> = vec![calculate_hash(&l_list, s_ord as u64)];
     let mut i: usize = 0;
-    //assert_eq!(paths.len(), queried_points.len());
-    let mut points_first: Vec<F> = Vec::new();
     for __ in 0..alpha { 
+        //points_first.push(queried_points[i]);
         for (j, l) in l_list.iter().enumerate() { 
-            if j==0 {
-                points_first.push(queried_points[i]);
-            }
             assert!(
                 paths[i].verify(
                     &leaf_crh_params,
@@ -234,10 +228,12 @@ pub fn fri_verify(mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: 
     }
 }
 }
+let mut points_first: Vec<F> = Vec::new();
+let mut indices_first: Vec<usize> = Vec::new();
 
-    let mut indices_first: Vec<usize> = Vec::new();
     for _ in 0..alpha {
         indices_first.push(*indices.last().unwrap() as usize);
+        points_first.push(queried_points[1]);
         for (i, l) in l_list.as_slice().iter().enumerate() {
             let index = *indices.last().unwrap();
             assert!(verify_fold_at_index(
@@ -254,6 +250,7 @@ pub fn fri_verify(mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: 
     }
     
     }
+    
     (points_first, indices_first)
 }
 
