@@ -34,14 +34,14 @@ fn main() {
     let mut s: F = MULT_GEN;
     
     
-    for _ in 0..210 {
+    for _ in 0..211 {
         s = s.pow(&[2]);
     }
     for _ in 0..131 {
         s = s.pow([3]);
     }
     let mut g: F = s.clone();
-    for _ in 0..6 {
+    for _ in 0..5 {
         g = g.pow(&[2]);
     }
     let r: F = F::new(Fp::from(5), Fp::from(3));
@@ -58,10 +58,6 @@ fn main() {
     });
     let b_witness: DensePolynomial<F> = witness.clone() + blinding_factor;
 
-    let _b_witness_plus: DensePolynomial<F> = DensePolynomial {
-        coeffs: b_witness.coeffs.iter().enumerate().map(|(i, coeff)| coeff * g.pow([i as u64])).collect(),
-    };
-
     // psi
     let psi: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file("psi_coeffs.txt").unwrap() };
 
@@ -71,7 +67,7 @@ fn main() {
 
     let s_ord: u64 = 729*32;
     let rep_param: usize = 2;
-    let grinding_param: u8 = 2;
+    let grinding_param: u8 = 1;
 
     let now = Instant::now();
     let (challenge_vals, 

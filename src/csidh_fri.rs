@@ -6,7 +6,7 @@ use super::{F, FieldMT, poseidon_parameters, FieldPath, solve_linear_system, Fp}
 
 
 // This function executes one folding step in the CSIDH-FRI algorithm
-pub fn fold(f: &DensePolynomial<F>, l: u8, theta: F) -> DensePolynomial<F> {
+fn fold(f: &DensePolynomial<F>, l: u8, theta: F) -> DensePolynomial<F> {
 
 let mut g_polys: Vec<Vec<F>> = Vec::new();
 let d = (((Polynomial::degree(f))/(l as usize)) as f32).floor() as usize + 1;
@@ -16,14 +16,12 @@ let th = theta.pow(&[j as u64]);
 let mut g: Vec<F> = vec![F::from(0); d];
 
         for (i, coeff) in f.coeffs.iter().enumerate() {
-            //println!("Coeff: {}", coeff);
             if (j as u64 > i as u64) && ((j as u64 - i as u64) % l as u64 == 0) {
                 g[i] += coeff * (&th);
             } else if (i as u64 >= j as u64) && ((i as u64 - j as u64) % l as u64 == 0) {
                 g[(i - j as usize) / (l as usize)] += coeff * (&th);
             }
         }
-        //println!("Length g: {:?}", g.len());
         g_polys.push(g);
     }
     let mut final_g = vec![F::from(0); d];
@@ -63,7 +61,10 @@ fn round_commit(f_folded: &DensePolynomial<F>, s: &F, r: &F, s_ord: &u64) -> (Fi
                                     .map(|x| x.as_slice())
                                     .collect();
 
-    let mtree: FieldMT = FieldMT::new(&leaf_crh_params, &two_to_one_params, eval_vec_slice).unwrap();
+    let mtree: FieldMT = FieldMT::new(
+        &leaf_crh_params,
+        &two_to_one_params, 
+        eval_vec_slice).unwrap();
     (mtree.clone(), mtree.root(), point_vec)
 }
 
@@ -135,7 +136,14 @@ fn query(mtrees: Vec<FieldMT>, points: Vec<Vec<F>>, l_list: Vec<usize>, n: usize
         for (i, l) in l_list.iter().enumerate() {
             
             let index = *indices.last().unwrap() as usize;
-            let (m, p) = query_at_index(mtrees[i].clone(), mtrees[i+1].clone(), points[i].clone(), points[i+1].clone(), index, l_list[i], s_ord);
+            let (m, p) = query_at_index(
+                mtrees[i].clone(), 
+                mtrees[i+1].clone(), 
+                points[i].clone(), 
+                points[i+1].clone(), 
+                index, 
+                l_list[i], 
+                s_ord);
             
             paths = [paths.clone(),m].concat();
             queried_points = [queried_points.clone(),p.clone()].concat();
@@ -179,7 +187,6 @@ fn verify_fold_at_index(points: Vec<F>, x: F, t: F, l: usize, theta: F) -> bool 
     for (i, val) in g_vec.iter().enumerate() {
         y_supposedly += theta.pow([i as u64]) * val;
     }
-    //println!("Res: {:?}", y == y_supposedly);
     y == y_supposedly
 }
 
@@ -241,7 +248,7 @@ let mut indices_first: Vec<usize> = Vec::new();
 
     for _ in 0..alpha {
         indices_first.push(*indices.last().unwrap() as usize);
-        points_first.push(queried_points[0]);
+        points_first.push(queried_points[1]);
         for (i, l) in l_list.as_slice().iter().enumerate() {
             let index = *indices.last().unwrap();
             assert!(verify_fold_at_index(
