@@ -26,7 +26,12 @@ pub fn find_roots(roots_arr: &mut Vec<F>, n: usize) -> Vec<F> {
     roots_arr.to_vec()
 }
 
-fn zassenhaus(poly: Vec<F>) -> Vec<Vec<F>> {
+use std::collections::HashMap;
+
+use std::ops::Mul;
+
+fn zassenhaus(poly: Vec<F>) -> Vec<Vec<F>>
+{
     let n = poly.len() - 1;
     let mut factors = Vec::new();
 
@@ -58,12 +63,13 @@ fn zassenhaus(poly: Vec<F>) -> Vec<Vec<F>> {
     factors
 }
 
+
 fn newton_method(f: Vec<F>, df: Vec<F>, x0: F) -> F {
     let mut x: F = x0;
     loop {
-        let fx: F = f[0] + f[1] * x + f[2] * x.square();
-        let dfx: F = df[0] + df[1] * x;
-        let x_new: F = x - fx / dfx;
+        let fx: F = f[0] + f[1]*x + f[2]*x.square();
+        let dfx: F = df[0] + df[1]*x; 
+        let x_new: F = x - fx/dfx;
         if (x - x_new) < F::from(1) || -(x - x_new) < F::from(1) {
             return x_new;
         }

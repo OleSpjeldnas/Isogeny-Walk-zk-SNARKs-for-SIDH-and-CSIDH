@@ -2,16 +2,21 @@ use super::{poseidon_parameters, solve_linear_system, FieldMT, FieldPath, Fp, F}
 use ark_crypto_primitives::{crh::poseidon, CRHScheme};
 use ark_ff::Field;
 use ark_poly::{univariate::DensePolynomial, Polynomial};
+use ark_ff::Field;
+use ark_crypto_primitives::CRHScheme;
+use ark_crypto_primitives::crh::poseidon;
+use super::{F, FieldMT, poseidon_parameters, FieldPath, solve_linear_system, Fp};
 use rayon::prelude::*;
 
 // This function executes one folding step in the CSIDH-FRI algorithm
 pub fn fold(f: &DensePolynomial<F>, l: u8, theta: F) -> DensePolynomial<F> {
-    let mut g_polys: Vec<Vec<F>> = Vec::new();
-    let d = (((Polynomial::degree(f)) / (l as usize)) as f32).floor() as usize + 1;
-    for j in 0..l {
-        let th = theta.pow([j as u64]);
-        // The g are the g_i such that f(x) = x^i*g_i(x^l)
-        let mut g: Vec<F> = vec![F::from(0); d];
+
+let mut g_polys: Vec<Vec<F>> = Vec::new();
+let d = (((Polynomial::degree(f))/(l as usize)) as f32).floor() as usize + 1;
+for j in 0..l {
+let th = theta.pow(&[j as u64]);
+// The g are the g_i such that f(x) = x^i*g_i(x^l)
+let mut g: Vec<F> = vec![F::from(0); d];
 
         for (i, coeff) in f.coeffs.iter().enumerate() {
             //println!("Coeff: {}", coeff);
@@ -38,7 +43,7 @@ pub fn fold(f: &DensePolynomial<F>, l: u8, theta: F) -> DensePolynomial<F> {
 }
 
 // Computes the Merkle tree of the folded f on the evaluation domain r<s>
-pub fn round_commit(f_folded: &DensePolynomial<F>, s: &F, r: &F, s_ord: &u64) -> (FieldMT, Fp, Vec<F>) {
+fn round_commit(f_folded: &DensePolynomial<F>, s: &F, r: &F, s_ord: &u64) -> (FieldMT, Fp, Vec<F>) {
     let leaf_crh_params = poseidon_parameters();
     let two_to_one_params = leaf_crh_params.clone();
 
@@ -54,12 +59,10 @@ pub fn round_commit(f_folded: &DensePolynomial<F>, s: &F, r: &F, s_ord: &u64) ->
 }
 
 // Returns (Merkle Trees, Merkle Roots, Evaluations)
-pub fn commit(
-    f: DensePolynomial<F>, l_list: Vec<usize>, mut s: F, mut r: F, mut s_ord: u64,
-) -> (Vec<FieldMT>, Vec<Fp>, Vec<Vec<F>>) {
-    let mut mtrees: Vec<FieldMT> = Vec::new();
-    let mut points: Vec<Vec<F>> = Vec::new();
-    let mut roots: Vec<Fp> = Vec::new();
+pub fn commit(f: DensePolynomial<F>, l_list: Vec<usize>, mut s: F, mut r: F, mut s_ord: u64) -> (Vec<FieldMT>, Vec<Fp>, Vec<Vec<F>>) {
+let mut mtrees: Vec<FieldMT> = Vec::new();
+let mut points: Vec<Vec<F>> = Vec::new();
+let mut roots: Vec<Fp> = Vec::new();
 
     let (first_mt, first_root, first_points) = round_commit(&f, &s, &r, &s_ord);
     mtrees.push(first_mt);
@@ -85,9 +88,7 @@ pub fn commit(
     (mtrees, roots, points)
 }
 
-pub fn query_at_index(
-    mt1: FieldMT, mt2: FieldMT, points1: Vec<F>, points2: Vec<F>, index: usize, l: usize, n: usize,
-) -> (Vec<FieldPath>, Vec<F>) {
+pub fn query_at_index(mt1: FieldMT, mt2: FieldMT, points1: Vec<F>, points2: Vec<F>, index: usize,l: usize, n: usize) -> (Vec<FieldPath>, Vec<F>) {
     let mut paths: Vec<FieldPath> = Vec::new();
     // Query MT2 at position index, save point to var, path to vec
     let path_main: FieldPath = mt2.generate_proof(index % (n / l)).unwrap();
@@ -106,51 +107,41 @@ pub fn query_at_index(
     (paths, points)
 }
 
-pub fn query(
-    mtrees: Vec<FieldMT>, points: Vec<Vec<F>>, l_list: Vec<usize>, n: usize, alpha: usize,
-) -> (Vec<FieldPath>, Vec<F>, Vec<usize>) {
-    let mut paths: Vec<FieldPath> = Vec::new();
-    let mut queried_points: Vec<F> = Vec::new();
+pub fn query(mtrees: Vec<FieldMT>, points: Vec<Vec<F>>, l_list: Vec<usize>, n: usize, alpha: usize) -> (Vec<FieldPath>, Vec<F>, Vec<usize>) {
+let mut paths: Vec<FieldPath> = Vec::new();
+let mut queried_points: Vec<F> = Vec::new();
 
-    // Vec of indices to query consistency for PolyIOP
-    let mut indices_first: Vec<usize> = Vec::new();
-    let mut indices: Vec<u64> = Vec::new();
-    indices.push(calculate_hash(&l_list, n as u64));
-    for _ in 0..alpha {
-        indices_first.push(*indices.last().unwrap() as usize);
-        let mut s_ord = n;
-        for (i, l) in l_list.iter().enumerate() {
-            let index = *indices.last().unwrap() as usize;
-            let (m, p) = query_at_index(
-                mtrees[i].clone(),
-                mtrees[i + 1].clone(),
-                points[i].clone(),
-                points[i + 1].clone(),
-                index,
-                l_list[i],
-                s_ord,
-            );
-
-            paths = [paths.clone(), m].concat();
-            queried_points = [queried_points.clone(), p.clone()].concat();
-            indices.push(calculate_hash(&indices, s_ord as u64));
-            s_ord /= l;
-        }
+// Vec of indices to query consistency for PolyIOP
+let mut indices_first: Vec<usize> = Vec::new();
+let mut indices: Vec<u64> = Vec::new();
+indices.push(calculate_hash(&l_list, n as u64));
+for _ in 0..alpha {
+    indices_first.push(*indices.last().unwrap() as usize);
+    let mut s_ord = n.clone();
+    for (i, l) in l_list.iter().enumerate() {
+        
+        let index = *indices.last().unwrap() as usize;
+        let (m, p) = query_at_index(mtrees[i].clone(), mtrees[i+1].clone(), points[i].clone(), points[i+1].clone(), index, l_list[i], s_ord);
+        
+        paths = [paths.clone(),m].concat();
+        queried_points = [queried_points.clone(),p.clone()].concat();
+        indices.push(calculate_hash(&indices, s_ord as u64));
+        s_ord /= l;
     }
-    (paths, queried_points, indices_first)
+}
+(paths, queried_points, indices_first)
 }
 
-pub fn fri_prove(
-    f: DensePolynomial<F>, l_list: Vec<usize>, s: F, r: F, s_ord: u64, alpha: usize,
-) -> (Vec<FieldPath>, Vec<F>, Vec<Fp>, Vec<usize>) {
-    let (mtrees, mroots, evals) = commit(f, l_list.clone(), s, r, s_ord);
+pub fn fri_prove(f: DensePolynomial<F>, l_list: Vec<usize>, s: F, r: F, s_ord: u64, alpha: usize) 
+-> (Vec<FieldPath>, Vec<F>, Vec<Fp>, Vec<usize>) {
+    let (mtrees, mroots, evals) = commit(f, l_list.clone(), s, r, s_ord.clone());
 
     let (paths, points, indices) = query(mtrees, evals, l_list, s_ord as usize, alpha);
-
+   
     (paths, points, mroots, indices)
-}
+}  
 
-// Assert the equality y != \sum_i t^i*x^i*v_i
+    // Assert the equality y != \sum_i t^i*x^i*v_i
 pub fn verify_fold_at_index(points: Vec<F>, x: F, t: F, l: usize, theta: F) -> bool {
     let y: F = points[0];
     let z_vec: Vec<F> = points[1..].to_vec();
@@ -172,11 +163,9 @@ pub fn verify_fold_at_index(points: Vec<F>, x: F, t: F, l: usize, theta: F) -> b
     y == y_supposedly
 }
 
-//Returns indices to query for PolyIOP together with the corresponding points
-pub fn fri_verify(
-    mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: Vec<Fp>, l_list: Vec<usize>, s: F, r: F, s_ord: u64,
-    alpha: u8,
-) -> (Vec<F>, Vec<usize>) {
+//Returns indices to query for PolyIOP together with the corresponding points 
+pub fn fri_verify(mut paths: Vec<FieldPath>, mut queried_points: Vec<F>, roots: Vec<Fp>, l_list: Vec<usize>, s: F, r: F, s_ord: u64, alpha: u8) 
+-> (Vec<F>, Vec<usize>) {
     let leaf_crh_params = poseidon_parameters();
     let two_to_one_params = leaf_crh_params.clone();
 
@@ -219,24 +208,23 @@ pub fn fri_verify(
                 .unwrap());
             i += 1;
             for _ in 0..*l {
-                assert!(paths[i]
-                    .verify(
-                        &leaf_crh_params,
-                        &two_to_one_params,
-                        &roots[j],
-                        [queried_points[i].c0, queried_points[i].c1]
-                    )
-                    .unwrap());
-                i += 1;
-            }
-        }
+    assert!(
+        paths[i].verify(
+            &leaf_crh_params,
+            &two_to_one_params,
+            &roots[j],
+            [queried_points[i].c0, queried_points[i].c1]
+        ).unwrap());
+        i+=1;
     }
-    let mut points_first: Vec<F> = Vec::new();
-    let mut indices_first: Vec<usize> = Vec::new();
+}
+}
+let mut points_first: Vec<F> = Vec::new();
+let mut indices_first: Vec<usize> = Vec::new();
 
     for _ in 0..alpha {
         indices_first.push(*indices.last().unwrap() as usize);
-        points_first.push(queried_points[1]);
+        points_first.push(queried_points[0]);
         for (i, l) in l_list.as_slice().iter().enumerate() {
             let index = *indices.last().unwrap();
             assert!(verify_fold_at_index(
@@ -251,9 +239,10 @@ pub fn fri_verify(
             queried_points.drain(0..*l + 1);
         }
     }
-
+    
     (points_first, indices_first)
 }
+
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};

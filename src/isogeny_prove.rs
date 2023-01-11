@@ -1,6 +1,13 @@
+<<<<<<< HEAD
+=======
+use std::ops::{Div, Sub};
+use rayon::prelude::*;
+
+>>>>>>> master
 use super::*;
 use ark_ff::UniformRand;
 use ark_poly::polynomial::univariate::DensePolynomial;
+<<<<<<< HEAD
 use ark_std::test_rng;
 use merkle::{poseidon_parameters, FieldMT};
 
@@ -12,6 +19,16 @@ pub fn prove(
     witness: DensePolynomial<F>, psi: DensePolynomial<F>, g: F, s: F, r: F, s_ord: u64, y_start: &F, y_end: &F,
     l_list: Vec<usize>, rep_param: usize,
 ) -> (Vec<F>, Vec<Fp>, Vec<Fp>, Vec<FieldPath>, Vec<Vec<FieldPath>>, Vec<F>, Vec<Vec<F>>) {
+=======
+use ark_ff::{UniformRand};
+use ark_std::test_rng;
+use merkle::{FieldMT, poseidon_parameters};
+// Witness is the witness polynomial, psi the inverse of w(x)-w(g^2x), g the generator of the interpolation domain, 
+//the evaluation domain is E = r<s>. Finally, s_ord is the size of E.   ->    (Challenges, roots, roots_fri, paths_fri, paths, points_fri, points)
+pub fn prove(witness: DensePolynomial<F>, psi: DensePolynomial<F>, g: F, s: F, r: F, s_ord: u64, y_start: &F, y_end: &F, l_list: Vec<usize>, rep_param: usize, grinding_param: u8)
+ -> (Vec<F>, Vec<Fp>, Vec<Fp>, Vec<FieldPath>, Vec<Vec<FieldPath>>, Vec<F>, Vec<Vec<F>>){
+   
+>>>>>>> master
     let n: usize = witness.coeffs.len();
 
     let mut rng = test_rng();
@@ -37,9 +54,23 @@ pub fn prove(
     let leaf_crh_params = params.clone();
     let two_to_one_params = params.clone();
 
+<<<<<<< HEAD
     let D_0: Vec<F> = (0..s_ord).into_par_iter().map(|i| r * s.pow([i])).collect();
     let witness_evals: Vec<F> = D_0.clone().into_par_iter().map(|x| b_witness.evaluate(&x)).collect();
     let psi_evals: Vec<F> = D_0.clone().into_par_iter().map(|x| psi.evaluate(&x)).collect();
+=======
+
+    let D_0: Vec<F> = (0..s_ord).into_iter()
+                                .map(|i| r*s.pow([i]))
+                                .collect();
+    let witness_evals: Vec<F> = D_0.clone().into_par_iter()
+                                   .map(|x| b_witness.evaluate(&x))
+                                   .collect();
+    let psi_evals: Vec<F> = D_0.clone().into_iter()
+    .map(|x| psi.evaluate(&x))
+    .collect();
+    println!("Checkpoint 0");
+>>>>>>> master
 
     let mut witness_evals_merkle: Vec<Vec<Fp>> = witness_evals.par_iter().map(|x| vec![x.c0, x.c1]).collect();
     let mut psi_evals_merkle: Vec<Vec<Fp>> = psi_evals.par_iter().map(|x| vec![x.c0, x.c1]).collect();
@@ -57,7 +88,17 @@ pub fn prove(
     let witness_mtree: FieldMT = FieldMT::new(&leaf_crh_params, &two_to_one_params, w_merkle_slice).unwrap();
 
     // Merkle tree of psi evaluations on E
+<<<<<<< HEAD
     let psi_mtree: FieldMT = FieldMT::new(&leaf_crh_params, &two_to_one_params, psi_merkle_slice).unwrap();
+=======
+    let psi_mtree: FieldMT = FieldMT::new(
+        &leaf_crh_params,
+        &two_to_one_params,
+        psi_merkle_slice
+    )
+    .unwrap();
+println!("Checkpoint 1");
+>>>>>>> master
     let mut roots: Vec<Fp> = vec![witness_mtree.root(), psi_mtree.root()];
     //let roots: Vec<Fp> = vec![Fp::from(0)];
 
@@ -83,7 +124,17 @@ pub fn prove(
     let c_merkle_slice: Vec<&[Fp]> = c_evals_merkle.par_iter().map(|x| x.as_slice()).collect();
 
     // Merkle tree of witness evaluations on E
+<<<<<<< HEAD
     let c_mtree: FieldMT = FieldMT::new(&leaf_crh_params, &two_to_one_params, c_merkle_slice).unwrap();
+=======
+    let c_mtree: FieldMT = FieldMT::new(
+        &leaf_crh_params,
+        &two_to_one_params,
+        c_merkle_slice
+    )
+    .unwrap();
+    println!("Checkpoint 2");
+>>>>>>> master
     // Compute the evaluations of the constraint polynomial C(x) on E
 
     roots.push(c_mtree.root());
@@ -98,8 +149,16 @@ pub fn prove(
     let witness_y_plus_plus: F = b_witness.evaluate(&ggz);
     let psi_y: F = psi.evaluate(&z);
     let c_y: F = c.evaluate(&z);
+<<<<<<< HEAD
     let E: usize = 32 * n / 9;
 
+=======
+    //let T: u64 = u64::try_from(n).unwrap();
+    let E: usize = 32*n/9;
+
+    //assert_eq!(witness_y_plus, b_witness.evaluate(&gz));
+    
+>>>>>>> master
     let challenge_vals: Vec<F> = vec![witness_y, witness_y_plus, witness_y_plus_plus, psi_y, c_y];
 
     // Finally, create and commit to the composition polynomial P(x)
@@ -132,11 +191,30 @@ pub fn prove(
                 .naive_mul(&(c + DensePolynomial { coeffs: vec![-challenge_vals[4]] }))
                 .div(&DensePolynomial { coeffs: vec![-z, F::from(1)] });
 
+<<<<<<< HEAD
     let (paths_fri, points_fri, roots_fri, indices) = fri_prove(p, l_list, s, r, s_ord, rep_param);
 
     let mut witness_query_vals: Vec<F> = vec![];
     let mut psi_query_vals: Vec<F> = vec![];
     let mut c_query_vals: Vec<F> = vec![];
+=======
+    let (paths_fri, points_fri, roots_fri, indices) = fri_prove(p.clone(), l_list, s, r, s_ord, rep_param, grinding_param);
+    
+println!("Checkpoint 4");
+let mut witness_query_vals: Vec<F> = vec![];
+let mut psi_query_vals: Vec<F> = vec![];
+let mut c_query_vals: Vec<F> = vec![];
+
+let mut witness_query_path: Vec<FieldPath> = vec![];
+let mut psi_query_path: Vec<FieldPath> = vec![];
+let mut c_query_path: Vec<FieldPath> = vec![];
+for index in indices.iter() {
+    println!("index: {:?}", index);
+    let z_ind: usize = *index;
+    witness_query_vals.push(witness_evals[z_ind]);
+    psi_query_vals.push(psi_evals[z_ind]);
+    c_query_vals.push(c_evals[z_ind]);
+>>>>>>> master
 
     let mut witness_query_path: Vec<FieldPath> = vec![];
     let mut psi_query_path: Vec<FieldPath> = vec![];
@@ -159,6 +237,7 @@ pub fn prove(
     (challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points)
 }
 
+<<<<<<< HEAD
 #[allow(clippy::too_many_arguments)]
 pub fn verify(
     challenges: Vec<F>, roots_fri: Vec<Fp>, roots: Vec<Fp>, paths_fri: Vec<FieldPath>,
@@ -228,6 +307,98 @@ pub fn verify(
     true
 }
 
+=======
+pub fn verify(challenges: Vec<F>, roots_fri: Vec<Fp>, roots: Vec<Fp>, paths_fri: Vec<FieldPath>, additional_paths: Vec<Vec<FieldPath>>, points_fri: Vec<F>, additional_points: Vec<Vec<F>>,
+            g: F, s: F, r: F, n: &u64, s_ord: u64, y_start: &F, y_end: &F, l_list: Vec<usize>, rep_param: usize, grinding_param: u8) -> bool {
+                // Compute z, alphas and zetas 
+            let params = poseidon_parameters(); 
+            let leaf_crh_params = params.clone();
+            let two_to_one_params = params.clone();
+            let z: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, roots.clone()).unwrap(), Fp::from(0));
+            let gz: F = g*z;
+            let ggz: F = g*gz;
+            let alpha_1: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, roots[..2].to_vec().clone()).unwrap(), Fp::from(0));
+            let alpha_2: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_1.c0]).unwrap(), Fp::from(0));
+            let alpha_3: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_2.c0]).unwrap(), Fp::from(0));
+            let alpha_4: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_3.c0]).unwrap(), Fp::from(0));
+            let mut zeta_vec: Vec<Fp> = vec![poseidon::CRH::<Fp>::evaluate(&params, vec![z.c0]).unwrap()];
+            
+            for _ in 0..4{
+                zeta_vec.push(poseidon::CRH::<Fp>::evaluate(&params, zeta_vec.clone()).unwrap());
+            }
+            // Check that the FRI queries are correct
+            let (points_first, indices_first) = fri_verify(paths_fri, points_fri.clone(), roots_fri, l_list.clone(), s.clone(), r.clone(), s_ord.clone(), rep_param as u8, grinding_param);
+            // Check that the challenges were computed correctly
+            let E: u64 = 32*n/9;
+            let c1: F = initial_challenge(y_start, &challenges[0], &z);
+            let c2: F = mod_challenge(&challenges[0], &challenges[1], &z, &g, &n);
+            let c3: F = psi_challenge(&challenges[0], &challenges[2], &challenges[3], &z, n, &g);
+            let c4: F = final_challenge(y_end, &challenges[0], &z, n, &g);
+            
+            let asserted_c: F = alpha_1*z.pow(&[E-n-2])*c1 
+                                + alpha_2*z.pow(&[E-3*n-13])*c2 
+                                + alpha_3*z.pow(&[E-n-5])*c3
+                                + alpha_4*z.pow(&[E-n-2])*c4;
+            assert_eq!(asserted_c, challenges[4]);
+            //println!("Checkpoint 6: {}", points_first[0]);
+            // Check consistency between P(x) in FRI and the committed-to polynomials
+            
+            println!("iindex: {:?}", points_first.last().unwrap());
+            for (i, index) in indices_first.iter().enumerate() {
+                let x_0: F = r*s.pow(&[*index as u64]);
+                
+                let witness_val: F = additional_points[0][i];
+                //println!("Index: {}", witness_val);
+                let psi_val: F = additional_points[1][i];
+                let c_val: F = additional_points[2][i];
+                let asserted_p: F = F::new(zeta_vec[0], Fp::from(0))*x_0.pow(&[E-n])*(witness_val-challenges[0])/(x_0 - z)
+                                    + F::new(zeta_vec[1], Fp::from(0))*x_0.pow(&[E-n])*(witness_val-challenges[1])/(x_0 - gz)
+                                    + F::new(zeta_vec[2], Fp::from(0))*x_0.pow(&[E-n])*(witness_val-challenges[2])/(x_0 - ggz)
+                                    + F::new(zeta_vec[3], Fp::from(0))*x_0.pow(&[E-n-1])*(psi_val-challenges[3])/(x_0 - z)
+                                    + F::new(zeta_vec[4], Fp::from(0))*(c_val-challenges[4])/(x_0 - z);
+                assert_eq!(asserted_p, points_first[i]);
+                // Verify Merkle Paths
+                assert!(
+                    additional_paths[0][i].verify(
+                        &leaf_crh_params,
+                        &two_to_one_params,
+                        &roots[0],
+                        [witness_val.c0, witness_val.c1]
+                    ).unwrap());
+
+                assert!(
+                    additional_paths[1][i].verify(
+                        &leaf_crh_params,
+                        &two_to_one_params,
+                        &roots[0],
+                        [witness_plus_val.c0, witness_plus_val.c1]
+                    ).unwrap());
+
+                assert!(
+                    additional_paths[2][i].verify(
+                        &leaf_crh_params,
+                        &two_to_one_params,
+                        &roots[0],
+                        [witness_plus_plus_val.c0, witness_plus_plus_val.c1]
+                    ).unwrap());
+
+                assert!(
+                    additional_paths[3][i].verify(
+                        &leaf_crh_params,
+                        &two_to_one_params,
+                        &roots[1],
+                        [psi_val.c0, psi_val.c1]
+                    ).unwrap());
+                assert!(
+                    additional_paths[4][i].verify(
+                        &leaf_crh_params,
+                        &two_to_one_params,
+                        &roots[2],
+                        [c_val.c0, c_val.c1]
+                    ).unwrap());
+            }
+            true}
+>>>>>>> master
 pub fn mod_challenge(x: &F, y: &F, z: &F, g: &F, T: &u64) -> F {
     let eval: F = x * x * x + y * y * y - x * x * y * y + F::from(1488u128) * (x * x * y + y * y * x)
         - F::from(162000u128) * (x * x + y * y)
@@ -293,6 +464,7 @@ pub fn final_challenge(y_end: &F, eval: &F, x_0: &F, n: &u64, g: &F) -> F {
     (eval - y_end) / (x_0 - g.pow([*n - 1]))
 }
 
+<<<<<<< HEAD
 //Returns ((x-g^(T-2))*(x-g^(T-1))*(p(x)-q(x))*psi(x)-1)/(x^T-1)
 pub fn psi_poly(
     p: &DensePolynomial<F>, q: &DensePolynomial<F>, psi: &DensePolynomial<F>, T: usize, g: F,
@@ -313,3 +485,43 @@ pub fn psi_challenge(y_witness: &F, y_witness_plusplus: &F, y_psi: &F, x_0: &F, 
 
     g_prefactor * ((y_witness - y_witness_plusplus) * y_psi - F::from(1)) / (x_0.pow([*n]) - F::from(1))
 }
+=======
+        }
+    
+    pub fn psi_challenge(y_witness: &F, y_witness_plusplus: &F, y_psi: &F, x_0: &F, n: &u64, g: &F) -> F {
+        let g_pow: F =  g.pow(&[*n as u64-2]);
+        let g_prefactor: F = (x_0 - g_pow) * (x_0 - g_pow*g);
+        
+        g_prefactor*((y_witness-y_witness_plusplus)*y_psi-F::from(1))/(x_0.pow(&[*n])-F::from(1))
+    }
+    
+    fn lines_from_file(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
+    BufReader::new(File::open(filename)?).lines()
+    .map(|line| {
+        let line = line?;
+        let a: Fp;
+        let b: Fp;
+        if ! line.contains("*x") {
+            a = Fp::from_str(&line).unwrap();
+            b = Fp::from(0);
+        }
+        else if ! line.contains("+") {
+            let mut parts = line.trim().split("*x");
+            b = Fp::from_str(parts.next().unwrap().trim()).unwrap();
+            a = Fp::from(0);
+        }
+        else {
+        
+        let mut parts = line.trim().split("*x +");
+        
+        b = Fp::from_str(parts.next().unwrap()).unwrap();
+        //println!("b: {:?}", b);
+        a = Fp::from_str(parts.next().unwrap().trim()).unwrap();
+        //println!("a: {:?}", a);
+        //println!("yes");
+    }
+        Ok(F::new(a,b))
+    })
+    .collect()
+}
+>>>>>>> master

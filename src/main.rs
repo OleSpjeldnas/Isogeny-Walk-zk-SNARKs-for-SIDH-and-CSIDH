@@ -1,10 +1,11 @@
-use ark_crypto_primitives::{crh::poseidon, CRHScheme};
-use ark_ff::{Field, MontFp, UniformRand};
-use ark_poly::{univariate::DensePolynomial, Polynomial};
-use ark_serialize::{CanonicalSerialize, Compress};
-use ark_std::{iterable::Iterable, test_rng};
-use csidh_fri::*;
-use isogeny_prove::{prove, verify};
+use ark_ff::{MontFp};
+use ark_poly::{univariate::DensePolynomial,Polynomial};
+//pub mod field;
+pub mod test_field;
+use ark_std::iterable::Iterable;
+//use field::{FqConfig, F as Fp, Fq2 as F};
+use test_field::{F as Fp, Fq2 as F};
+pub mod matrix;
 use matrix::*;
 use merkle::{poseidon_parameters, FieldMT, FieldPath};
 use rayon::prelude::*;
@@ -23,31 +24,38 @@ use test_field::{Fq2 as F, F as Fp};
 pub mod csidh_fri;
 pub mod get_roots;
 pub mod isogeny_prove;
-pub mod matrix;
+use isogeny_prove::{prove, verify};
+use csidh_fri::*;
+use ark_ff::Field;
+use std::hash::{Hash, Hasher};
+use ark_crypto_primitives::CRHScheme;
+use ark_crypto_primitives::crh::poseidon;
+use ark_ff::UniformRand;
+use std::fs::File;
+use ark_std::test_rng;
+use std::io::{ Write};
+//use ark_crypto_primitives::*;
 pub mod merkle;
-pub mod test_field;
-
-// This element has order 2^16
-const FFT_GEN: F = F::new(MontFp!("17231939763216297887217622266809272467545088513556272765685947455324509609957290372982961616729012186542372231626409308935024145447"), MontFp!("14794844963276765294078403131215971792257250447333909245841623048180831260548488349233598857775988700515612163307689388891415390090"));
-// This is the multiplicative generator of the field ^(l-2)
-// It has order 2^217*3^136
-const MULT_GEN: F = F::new(MontFp!("4887884732269044310381829002291498723817156048752319302265161467241044247866395345194043334365723689179743805338576987868462946714"), MontFp!("9775769464538088620763658004582997447634312097504638604530322934482088495732790690388086668731447378359487610677153975736925893426"));
-// This function computes the FFT of a polynomial over the finite field F
-
+use merkle::{FieldMT, poseidon_parameters, FieldPath};
+use std::time::{Instant};
+use rayon::prelude::*;
+use ark_serialize::{CanonicalSerialize, Compress};
+use pprof::*;
 fn main() {
     // l_vec contains all the folding factors
-    let l_list: Vec<usize> = vec![vec![3; 6], vec![2; 2]].concat();
+    let l_list: Vec<usize> = vec![vec![3; 6], vec![2;2]].concat();
     let mut s: F = MULT_GEN;
-
+    
+    
     for _ in 0..210 {
-        s = s.pow([2]);
+        s = s.pow(&[2]);
     }
     for _ in 0..131 {
         s = s.pow([3]);
     }
-    let mut g: F = s;
+    let mut g: F = s.clone();
     for _ in 0..6 {
-        g = g.pow([2]);
+        g = g.pow(&[2]);
     }
     let r: F = F::new(Fp::from(5), Fp::from(3));
 
@@ -72,9 +80,10 @@ fn main() {
     let psi: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("psi_coeffs.txt").unwrap() };
 
     let y_start: F = b_witness.evaluate(&F::from(1));
-    let y_end: F = b_witness.evaluate(&g.pow([728]));
+    let y_end: F = b_witness.evaluate(&g.pow(&[728]));
+    
 
-    let s_ord: u64 = 729 * 64;
+    let s_ord: u64 = 729*64;
     let rep_param: usize = 2;
 
     //let guard = pprof::ProfilerGuardBuilder::default().frequency(1000).build().unwrap();
@@ -115,11 +124,12 @@ fn main() {
         let size6 = additional_paths.serialized_size(Compress::Yes);
         let size7 = additional_points.serialized_size(Compress::Yes);
 
-        println!("Proof Size: {} kB", ((size1 + size2 + size3 + size4 + size5 + size6 + size7) as f32) / 1024f32);
+        println!("Proof Size: {} kB", ((size1+size2+size3+size4+size5+size6+size7) as f32)/1024f32);
         println!("Verification successful");
     } else {
         println!("Verification failed");
     }
+    return;
 }
 
 fn calculate_hash<T: Hash>(t: &T, n: u64) -> u64 {
@@ -128,77 +138,87 @@ fn calculate_hash<T: Hash>(t: &T, n: u64) -> u64 {
     s.finish() % n
 }
 
-fn raise_to_power(mut s: F, v: u64, n: u8) -> F {
-    for _ in 0..n {
-        s = s.pow([v]);
-    }
-    s
+fn raise_to_power(x: F, v: u64, n: u8) -> F {
+    let mut s = x;
+    for i in 0..n{
+    s = s.pow(&[v]);}
+s
 }
+
 
 fn write_to_file(interp_poly: &Vec<F>) -> std::io::Result<()> {
     let mut file = File::create("interp_poly_coeffs.txt")?;
-    for i in interp_poly.iter() {
-        let mut i0: Fp = Fp::from(0);
-        let mut i1: Fp = Fp::from(0);
-
-        // TODO: Obfuscated logic (what is the intention here)
-        if i.c0 != Fp::from(0) {
-            i0 = i.c0;
-        }
-        if i.c1 != Fp::from(0) {
-            i1 = i.c1;
-        }
-        writeln!(file, "{i0}, {i1}")?;
-    }
-
-    Ok(())
+for i in interp_poly.iter() {
+    let mut i0: Fp = Fp::from(0);let mut i1: Fp = Fp::from(0);
+    if !(i.c0==Fp::from(0)) {i0 = i.c0;}
+    if !(i.c1==Fp::from(0)) {i1 = i.c1;}
+    writeln!(file, "{}, {}", i0, i1)?;
 }
 
+Ok(())}
+
+use std::{
+    io::{self, BufRead, BufReader},
+    path::Path,
+};
+use std::str::FromStr;
 fn lines_from_file(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
-    BufReader::new(File::open(filename)?)
-        .lines()
-        .map(|line| {
-            let line = line?;
-            let mut parts = line.trim().split(',');
-
-            let a = match Fp::from_str(parts.next().unwrap()) {
-                Ok(a_val) => a_val,
-                Err(_) => Fp::from(0),
-            };
-            let b = match Fp::from_str(parts.next().unwrap()) {
-                Ok(b_val) => b_val,
-                Err(_) => Fp::from(0),
-            };
-
-            Ok(F::new(a, b))
-        })
-        .collect()
+    BufReader::new(File::open(filename)?).lines()
+    .map(|line| {
+        let line = line?;
+        let mut parts = line.trim().split(",");
+        let a: Fp;
+        let b: Fp;
+        let a_tentative = Fp::from_str(parts.next().unwrap());
+        match a_tentative {
+            Ok(a_val) => a = a_val,
+            Err(_) => a = Fp::from(0),
+        }
+        let b_tentative = Fp::from_str(parts.next().unwrap());
+        match b_tentative {
+            Ok(b_val) => b = b_val,
+            Err(_) => b = Fp::from(0),
+        }
+        //let a: Fp = Fp::from_str(parts.next().unwrap()).unwrap();
+        //let b: Fp = Fp::from_str(parts.next().unwrap()).unwrap();
+        //println!("yes");
+        Ok(F::new(a,b))
+    })
+    .collect()
 }
 
 fn lines_from_file_2(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
-    BufReader::new(File::open(filename)?)
-        .lines()
-        .map(|line| {
-            let line = line?;
-            let a: Fp;
-            let b: Fp;
-            if !line.contains("*x") {
-                a = Fp::from_str(&line).unwrap();
-                b = Fp::from(0);
-            } else if !line.contains('+') {
-                let mut parts = line.trim().split("*x");
-                b = Fp::from_str(parts.next().unwrap().trim()).unwrap();
-                a = Fp::from(0);
-            } else {
-                let mut parts = line.trim().split("*x +");
-
-                b = Fp::from_str(parts.next().unwrap()).unwrap();
-                //println!("b: {:?}", b);
-                a = Fp::from_str(parts.next().unwrap().trim()).unwrap();
-                //println!("a: {:?}", a);
-                //println!("yes");
-            }
-            Ok(F::new(a, b))
-        })
-        .collect()
+    BufReader::new(File::open(filename)?).lines()
+    .map(|line| {
+        let line = line?;
+        let a: Fp;
+        let b: Fp;
+        if ! line.contains("*x") {
+            a = Fp::from_str(&line).unwrap();
+            b = Fp::from(0);
+        }
+        else if ! line.contains("+") {
+            let mut parts = line.trim().split("*x");
+            b = Fp::from_str(parts.next().unwrap().trim()).unwrap();
+            a = Fp::from(0);
+        }
+        else {
+        
+        let mut parts = line.trim().split("*x +");
+        
+        b = Fp::from_str(parts.next().unwrap()).unwrap();
+        //println!("b: {:?}", b);
+        a = Fp::from_str(parts.next().unwrap().trim()).unwrap();
+        //println!("a: {:?}", a);
+        //println!("yes");
+    }
+        Ok(F::new(a,b))
+    })
+    .collect()
 }
+// This element has order 2^16
+const FFT_GEN: F = F::new(MontFp!("17231939763216297887217622266809272467545088513556272765685947455324509609957290372982961616729012186542372231626409308935024145447"), MontFp!("14794844963276765294078403131215971792257250447333909245841623048180831260548488349233598857775988700515612163307689388891415390090"));
+// This is the multiplicative generator of the field ^(l-2)
+// It has order 2^217*3^136
+const MULT_GEN: F = F::new(MontFp!("4887884732269044310381829002291498723817156048752319302265161467241044247866395345194043334365723689179743805338576987868462946714"), MontFp!("9775769464538088620763658004582997447634312097504638604530322934482088495732790690388086668731447378359487610677153975736925893426"));
+// This function computes the FFT of a polynomial over the finite field F
