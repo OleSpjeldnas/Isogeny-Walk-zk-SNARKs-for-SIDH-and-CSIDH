@@ -1,12 +1,8 @@
 use ark_poly::{univariate::DensePolynomial, Polynomial};
 use ark_ff::Field;
-use ark_crypto_primitives::{CRHScheme, MerkleTree};
+use ark_crypto_primitives::CRHScheme;
 use ark_crypto_primitives::crh::poseidon;
-use ark_std::rand::seq::index;
 use super::{F, FieldMT, poseidon_parameters, FieldPath, solve_linear_system, Fp};
-use ndarray::prelude::*;
-use ndarray::{Array, ArrayView, Axis};
-use ndarray_linalg::*;
 use rayon::prelude::*;
 
 
@@ -122,16 +118,16 @@ pub fn query_at_index(mt1: FieldMT, mt2: FieldMT, points1: Vec<F>, points2: Vec<
 pub fn query(mtrees: Vec<FieldMT>, points: Vec<Vec<F>>, l_list: Vec<usize>, n: usize, alpha: usize) -> (Vec<FieldPath>, Vec<F>, Vec<usize>) {
 let mut paths: Vec<FieldPath> = Vec::new();
 let mut queried_points: Vec<F> = Vec::new();
+
 // Vec of indices to query consistency for PolyIOP
 let mut indices_first: Vec<usize> = Vec::new();
-//let n = l_list.len();
 let mut indices: Vec<u64> = Vec::new();
 indices.push(calculate_hash(&l_list, n as u64));
 for _ in 0..alpha {
     indices_first.push(*indices.last().unwrap() as usize);
     let mut s_ord = n.clone();
     for (i, l) in l_list.iter().enumerate() {
-        //println!("s_ord:{:?}", s_ord);
+        
         let index = *indices.last().unwrap() as usize;
         let (m, p) = query_at_index(mtrees[i].clone(), mtrees[i+1].clone(), points[i].clone(), points[i+1].clone(), index, l_list[i], s_ord);
         
