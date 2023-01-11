@@ -1,14 +1,11 @@
-use ark_ff::{MontFp};
-use ark_poly::{univariate::DensePolynomial,Polynomial};
+use ark_ff::MontFp;
+use ark_poly::univariate::DensePolynomial;
 //pub mod field;
-pub mod test_field;
-use ark_std::iterable::Iterable;
-//use field::{FqConfig, F as Fp, Fq2 as F};
-use test_field::{F as Fp, Fq2 as F};
+pub mod sidh_sike_p434;
+use sidh_sike_p434::{F as Fp, Fq2 as F};
 pub mod matrix;
 use matrix::*;
 use merkle::{poseidon_parameters, FieldMT, FieldPath};
-use rayon::prelude::*;
 use std::{
     collections::hash_map::DefaultHasher,
     fs::File,
@@ -18,7 +15,6 @@ use std::{
     str::FromStr,
     time::Instant,
 };
-use test_field::{Fq2 as F, F as Fp};
 
 // TODO: Move to separate crate
 pub mod csidh_fri;
@@ -27,20 +23,13 @@ pub mod isogeny_prove;
 use isogeny_prove::{prove, verify};
 use csidh_fri::*;
 use ark_ff::Field;
-use std::hash::{Hash, Hasher};
 use ark_crypto_primitives::CRHScheme;
 use ark_crypto_primitives::crh::poseidon;
 use ark_ff::UniformRand;
-use std::fs::File;
+use ark_poly::Polynomial;
 use ark_std::test_rng;
-use std::io::{ Write};
-//use ark_crypto_primitives::*;
 pub mod merkle;
-use merkle::{FieldMT, poseidon_parameters, FieldPath};
-use std::time::{Instant};
-use rayon::prelude::*;
 use ark_serialize::{CanonicalSerialize, Compress};
-use pprof::*;
 fn main() {
     // l_vec contains all the folding factors
     let l_list: Vec<usize> = vec![vec![3; 6], vec![2;2]].concat();
@@ -60,7 +49,6 @@ fn main() {
     let r: F = F::new(Fp::from(5), Fp::from(3));
 
     let witness: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("new_coeffs.txt").unwrap() };
-    // Witness(x+1)
     let n = witness.coeffs.len();
 
     let mut rng = test_rng();
@@ -73,7 +61,7 @@ fn main() {
     let b_witness: DensePolynomial<F> = witness.clone() + blinding_factor;
 
     let _b_witness_plus: DensePolynomial<F> = DensePolynomial {
-        coeffs: b_witness.coeffs.par_iter().enumerate().map(|(i, coeff)| coeff * g.pow([i as u64])).collect(),
+        coeffs: b_witness.coeffs.iter().enumerate().map(|(i, coeff)| coeff * g.pow([i as u64])).collect(),
     };
 
     // psi
@@ -83,18 +71,15 @@ fn main() {
     let y_end: F = b_witness.evaluate(&g.pow(&[728]));
     
 
-    let s_ord: u64 = 729*64;
+    let s_ord: u64 = 729*32;
     let rep_param: usize = 2;
+    let grinding_param: u8 = 2;
 
-    //let guard = pprof::ProfilerGuardBuilder::default().frequency(1000).build().unwrap();
     let now = Instant::now();
     let (challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points) =
-        prove(witness, psi, g, s, r, s_ord, &y_start, &y_end, l_list.clone(), rep_param);
+        prove(witness, psi, g, s, r, s_ord, &y_start, &y_end, l_list.clone(), rep_param, grinding_param);
     println!("Prover Time: {} s", now.elapsed().as_secs());
-    // if let Ok(report) = guard.unwrap().report().build() {
-    //    let file = File::create("flamegraph.svg").unwrap();
-    //     report.flamegraph(file).unwrap();
-    //};
+    
     let now = Instant::now();
     let b = verify(
         challenge_vals.clone(),
@@ -113,6 +98,7 @@ fn main() {
         &y_end,
         l_list,
         rep_param,
+        grinding_param
     );
     println!("Verifier Time: {} ms", now.elapsed().as_millis());
     if b {
@@ -157,11 +143,6 @@ for i in interp_poly.iter() {
 
 Ok(())}
 
-use std::{
-    io::{self, BufRead, BufReader},
-    path::Path,
-};
-use std::str::FromStr;
 fn lines_from_file(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
     BufReader::new(File::open(filename)?).lines()
     .map(|line| {

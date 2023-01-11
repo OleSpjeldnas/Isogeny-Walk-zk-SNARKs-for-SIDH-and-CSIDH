@@ -1,5 +1,4 @@
 use std::ops::{Div, Sub};
-use rayon::prelude::*;
 
 use super::*;
 use ark_poly::polynomial::univariate::DensePolynomial;
@@ -22,11 +21,11 @@ pub fn prove(witness: DensePolynomial<F>, psi: DensePolynomial<F>, g: F, s: F, r
                                               .naive_mul(&DensePolynomial{coeffs: vec![vec![-F::from(1)], vec![F::from(0); n-1], vec![F::from(1)]].concat()});
 
     let b_witness: DensePolynomial<F> =  witness.clone() + blinding_factor.clone();
-    let b_witness_plus:  DensePolynomial<F> = DensePolynomial{coeffs: b_witness.coeffs.par_iter()
+    let b_witness_plus:  DensePolynomial<F> = DensePolynomial{coeffs: b_witness.coeffs.iter()
         .enumerate()
         .map(|(i, coeff)| coeff*g.pow(&[i as u64]))
         .collect()};
-    let b_witness_plus_plus: DensePolynomial<F> = DensePolynomial{coeffs: b_witness_plus.coeffs.par_iter()
+    let b_witness_plus_plus: DensePolynomial<F> = DensePolynomial{coeffs: b_witness_plus.coeffs.iter()
         .enumerate()
         .map(|(i, coeff)| coeff*g.pow(&[i as u64]))
         .collect()};
@@ -39,21 +38,33 @@ pub fn prove(witness: DensePolynomial<F>, psi: DensePolynomial<F>, g: F, s: F, r
     let D_0: Vec<F> = (0..s_ord).into_iter()
                                 .map(|i| r*s.pow([i]))
                                 .collect();
-    let witness_evals: Vec<F> = D_0.clone().into_par_iter()
+    let witness_evals: Vec<F> = D_0.clone().into_iter()
                                    .map(|x| b_witness.evaluate(&x))
                                    .collect();
     let psi_evals: Vec<F> = D_0.clone().into_iter()
     .map(|x| psi.evaluate(&x))
     .collect();
 
-    let mut witness_evals_merkle: Vec<Vec<Fp>> = witness_evals.iter().map(|x| vec![x.c0, x.c1]).collect();
-    let mut psi_evals_merkle: Vec<Vec<Fp>> = psi_evals.iter().map(|x| vec![x.c0, x.c1]).collect();
+    let mut witness_evals_merkle: Vec<Vec<Fp>> = witness_evals.
+                                    iter()
+                                    .map(|x| vec![x.c0, x.c1])
+                                    .collect();
+    let mut psi_evals_merkle: Vec<Vec<Fp>> = psi_evals.
+                                    iter()
+                                    .map(|x| vec![x.c0, x.c1])
+                                    .collect();
     let k: u32 = (((s_ord as f32).log2()).ceil()) as u32;
     witness_evals_merkle =vec![witness_evals_merkle, vec![vec![Fp::from(0),Fp::from(0)]; 2u64.pow(k) as usize - s_ord as usize]].concat();
     psi_evals_merkle =vec![psi_evals_merkle, vec![vec![Fp::from(0),Fp::from(0)]; 2u64.pow(k) as usize - s_ord as usize]].concat();
     
-    let w_merkle_slice: Vec<&[Fp]> = witness_evals_merkle.iter().map(|x| x.as_slice()).collect();
-    let psi_merkle_slice: Vec<&[Fp]> = psi_evals_merkle.iter().map(|x| x.as_slice()).collect();
+    let w_merkle_slice: Vec<&[Fp]> = witness_evals_merkle.
+                                    iter()
+                                    .map(|x| x.as_slice())
+                                    .collect();
+    let psi_merkle_slice: Vec<&[Fp]> = psi_evals_merkle.
+                                    iter()
+                                    .map(|x| x.as_slice())
+                                    .collect();
     // Merkle tree of witness evaluations on E
     let witness_mtree: FieldMT = FieldMT::new(
         &leaf_crh_params,
@@ -84,10 +95,10 @@ pub fn prove(witness: DensePolynomial<F>, psi: DensePolynomial<F>, g: F, s: F, r
     let c: DensePolynomial<F> = compute_c(c1, c2, c3, c4, &vec![alpha_1, alpha_2, alpha_3, alpha_4], &n);
 
     // Evaluate C(x) on E and commit
-    let c_evals: Vec<F> = D_0.clone().into_par_iter()
+    let c_evals: Vec<F> = D_0.clone().into_iter()
                                      .map(|x| c.evaluate(&x))
                                      .collect();
-    let mut c_evals_merkle: Vec<Vec<Fp>> = c_evals.par_iter()
+    let mut c_evals_merkle: Vec<Vec<Fp>> = c_evals.iter()
                                             .map(|x| vec![x.c0, x.c1])
                                             .collect();
                                             
@@ -115,10 +126,7 @@ pub fn prove(witness: DensePolynomial<F>, psi: DensePolynomial<F>, g: F, s: F, r
     let witness_y_plus_plus: F = b_witness.evaluate(&ggz);
     let psi_y: F = psi.evaluate(&z);
     let c_y: F = c.evaluate(&z);
-    //let T: u64 = u64::try_from(n).unwrap();
     let E: usize = 32*n/9;
-
-    //assert_eq!(witness_y_plus, b_witness.evaluate(&gz));
     
     let challenge_vals: Vec<F> = vec![witness_y, witness_y_plus, witness_y_plus_plus, psi_y, c_y];
     
@@ -150,7 +158,6 @@ pub fn prove(witness: DensePolynomial<F>, psi: DensePolynomial<F>, g: F, s: F, r
 
     let (paths_fri, points_fri, roots_fri, indices) = fri_prove(p.clone(), l_list, s, r, s_ord, rep_param, grinding_param);
     
-println!("Checkpoint 4");
 let mut witness_query_vals: Vec<F> = vec![];
 let mut psi_query_vals: Vec<F> = vec![];
 let mut c_query_vals: Vec<F> = vec![];
@@ -159,7 +166,6 @@ let mut witness_query_path: Vec<FieldPath> = vec![];
 let mut psi_query_path: Vec<FieldPath> = vec![];
 let mut c_query_path: Vec<FieldPath> = vec![];
 for index in indices.iter() {
-    println!("index: {:?}", index);
     let z_ind: usize = *index;
     witness_query_vals.push(witness_evals[z_ind]);
     psi_query_vals.push(psi_evals[z_ind]);
@@ -209,15 +215,13 @@ pub fn verify(challenges: Vec<F>, roots_fri: Vec<Fp>, roots: Vec<Fp>, paths_fri:
                                 + alpha_3*z.pow(&[E-n-5])*c3
                                 + alpha_4*z.pow(&[E-n-2])*c4;
             assert_eq!(asserted_c, challenges[4]);
-            //println!("Checkpoint 6: {}", points_first[0]);
+            
             // Check consistency between P(x) in FRI and the committed-to polynomials
             
-            println!("iindex: {:?}", points_first.last().unwrap());
             for (i, index) in indices_first.iter().enumerate() {
                 let x_0: F = r*s.pow(&[*index as u64]);
                 
                 let witness_val: F = additional_points[0][i];
-                //println!("Index: {}", witness_val);
                 let psi_val: F = additional_points[1][i];
                 let c_val: F = additional_points[2][i];
                 let asserted_p: F = F::new(zeta_vec[0], Fp::from(0))*x_0.pow(&[E-n])*(witness_val-challenges[0])/(x_0 - z)
@@ -239,27 +243,11 @@ pub fn verify(challenges: Vec<F>, roots_fri: Vec<Fp>, roots: Vec<Fp>, paths_fri:
                     additional_paths[1][i].verify(
                         &leaf_crh_params,
                         &two_to_one_params,
-                        &roots[0],
-                        [witness_plus_val.c0, witness_plus_val.c1]
-                    ).unwrap());
-
-                assert!(
-                    additional_paths[2][i].verify(
-                        &leaf_crh_params,
-                        &two_to_one_params,
-                        &roots[0],
-                        [witness_plus_plus_val.c0, witness_plus_plus_val.c1]
-                    ).unwrap());
-
-                assert!(
-                    additional_paths[3][i].verify(
-                        &leaf_crh_params,
-                        &two_to_one_params,
                         &roots[1],
                         [psi_val.c0, psi_val.c1]
                     ).unwrap());
                 assert!(
-                    additional_paths[4][i].verify(
+                    additional_paths[2][i].verify(
                         &leaf_crh_params,
                         &two_to_one_params,
                         &roots[2],
@@ -267,7 +255,8 @@ pub fn verify(challenges: Vec<F>, roots_fri: Vec<Fp>, roots: Vec<Fp>, paths_fri:
                     ).unwrap());
             }
             true}
-pub fn mod_challenge(x: &F, y: &F, z: &F, g: &F, T: &u64) -> F {
+
+fn mod_challenge(x: &F, y: &F, z: &F, g: &F, T: &u64) -> F {
     let eval: F = x*x*x+y*y*y-x*x*y*y+F::from(1488u128)
     *(x*x*y+y*y*x)-F::from(162000u128)*
     (x*x+y*y)+F::from(40773375u128)*x*y
@@ -278,16 +267,16 @@ pub fn mod_challenge(x: &F, y: &F, z: &F, g: &F, T: &u64) -> F {
 }
 
 //Returns (p(x)-y_0)/(x - 1)
-    pub fn initial_poly(y_0: &F, p: DensePolynomial<F>) -> DensePolynomial<F> {
+    fn initial_poly(y_0: &F, p: DensePolynomial<F>) -> DensePolynomial<F> {
         (p + DensePolynomial{coeffs: vec![-*y_0]}).div(&DensePolynomial{coeffs: vec![F::from(-1), F::from(1)]})
     }
     //Returns (p(x)-y_end)/(x - g^(T-1))
-    pub fn final_poly(y_end: &F, p: DensePolynomial<F>, g: F, T: u64) -> DensePolynomial<F> {
+    fn final_poly(y_end: &F, p: DensePolynomial<F>, g: F, T: u64) -> DensePolynomial<F> {
         (p + DensePolynomial{coeffs: vec![-*y_end]}).div(&DensePolynomial{coeffs: vec![-g.pow(&[T-1]), F::from(1)]})
     }
 
     //Returns the composite polynomial
-    pub fn compute_c(c1: DensePolynomial<F>, c2: DensePolynomial<F>, c3: DensePolynomial<F>, c4: DensePolynomial<F>, alphas: &Vec<F>, T: &usize) -> DensePolynomial<F> {
+    fn compute_c(c1: DensePolynomial<F>, c2: DensePolynomial<F>, c3: DensePolynomial<F>, c4: DensePolynomial<F>, alphas: &Vec<F>, T: &usize) -> DensePolynomial<F> {
         let E: usize = 32*T/9;
         let deg_1: usize = E-T-2;
         let deg_2: usize = E-T-5;
@@ -299,7 +288,7 @@ pub fn mod_challenge(x: &F, y: &F, z: &F, g: &F, T: &u64) -> F {
         + c4.naive_mul(&DensePolynomial{coeffs: vec![vec![F::from(0); deg_1], vec![alphas[3]]].concat()})
     }
     // Returns (x-g^(T-1))*Phi_2(p(x), q(x))/(x^n - 1)
-   pub fn mod_poly_poly(p: &DensePolynomial<F>, q: &DensePolynomial<F>, T: usize, g: F) -> DensePolynomial<F> {
+   fn mod_poly_poly(p: &DensePolynomial<F>, q: &DensePolynomial<F>, T: usize, g: F) -> DensePolynomial<F> {
         let p_squared: DensePolynomial<F> = p.naive_mul(p);
         let q_squared: DensePolynomial<F> = q.naive_mul(q);
         let p_cubed: DensePolynomial<F> = p_squared.naive_mul(p);
@@ -318,17 +307,17 @@ pub fn mod_challenge(x: &F, y: &F, z: &F, g: &F, T: &u64) -> F {
         temp.naive_mul(&DensePolynomial{coeffs: vec![-g.pow(&[T as u64-1]), F::from(1)]}).div(&DensePolynomial{ coeffs: [vec![-F::from(1)], vec![F::from(0); T-1], vec![F::from(1)]].concat()})
     }
     
-    pub fn initial_challenge(y_0: &F, eval: &F, x_0: &F) -> F {
+    fn initial_challenge(y_0: &F, eval: &F, x_0: &F) -> F {
 
         (eval - y_0) / (x_0-F::from(1))
 
     }
-    pub fn final_challenge(y_end: &F, eval: &F, x_0: &F, n: &u64, g: &F) -> F {
+    fn final_challenge(y_end: &F, eval: &F, x_0: &F, n: &u64, g: &F) -> F {
 
         (eval - y_end) / (x_0-g.pow(&[*n-1]))
     }
     //Returns ((x-g^(T-2))*(x-g^(T-1))*(p(x)-q(x))*psi(x)-1)/(x^T-1)
-   pub fn psi_poly(p: &DensePolynomial<F>, q: &DensePolynomial<F>, psi: &DensePolynomial<F>, T: usize, g: F) -> DensePolynomial<F> {
+   fn psi_poly(p: &DensePolynomial<F>, q: &DensePolynomial<F>, psi: &DensePolynomial<F>, T: usize, g: F) -> DensePolynomial<F> {
         let diff:DensePolynomial<F> = p.sub(q);
         let g_pow: F =  g.pow(&[T as u64-2]);
         let x_1_poly: DensePolynomial<F> = DensePolynomial{coeffs: vec![-g_pow, F::from(1)]}.naive_mul(&DensePolynomial{coeffs: vec![-g_pow*g, F::from(1)]});
@@ -337,39 +326,10 @@ pub fn mod_challenge(x: &F, y: &F, z: &F, g: &F, T: &u64) -> F {
 
         }
     
-    pub fn psi_challenge(y_witness: &F, y_witness_plusplus: &F, y_psi: &F, x_0: &F, n: &u64, g: &F) -> F {
+    fn psi_challenge(y_witness: &F, y_witness_plusplus: &F, y_psi: &F, x_0: &F, n: &u64, g: &F) -> F {
         let g_pow: F =  g.pow(&[*n as u64-2]);
         let g_prefactor: F = (x_0 - g_pow) * (x_0 - g_pow*g);
         
         g_prefactor*((y_witness-y_witness_plusplus)*y_psi-F::from(1))/(x_0.pow(&[*n])-F::from(1))
     }
     
-    fn lines_from_file(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
-    BufReader::new(File::open(filename)?).lines()
-    .map(|line| {
-        let line = line?;
-        let a: Fp;
-        let b: Fp;
-        if ! line.contains("*x") {
-            a = Fp::from_str(&line).unwrap();
-            b = Fp::from(0);
-        }
-        else if ! line.contains("+") {
-            let mut parts = line.trim().split("*x");
-            b = Fp::from_str(parts.next().unwrap().trim()).unwrap();
-            a = Fp::from(0);
-        }
-        else {
-        
-        let mut parts = line.trim().split("*x +");
-        
-        b = Fp::from_str(parts.next().unwrap()).unwrap();
-        //println!("b: {:?}", b);
-        a = Fp::from_str(parts.next().unwrap().trim()).unwrap();
-        //println!("a: {:?}", a);
-        //println!("yes");
-    }
-        Ok(F::new(a,b))
-    })
-    .collect()
-}
