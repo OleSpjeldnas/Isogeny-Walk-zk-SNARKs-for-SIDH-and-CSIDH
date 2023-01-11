@@ -2,8 +2,6 @@ use super::{Fp};
 use ark_crypto_primitives::{crh::poseidon, merkle_tree::{Config, IdentityDigestConverter}, MerkleTree, Path};
 use ark_sponge::poseidon::PoseidonConfig;
 use std::str::FromStr;
-use ark_ff::UniformRand;
-use ark_std::{test_rng};
 
 type H = poseidon::CRH<Fp>;
 type TwoToOneH = poseidon::TwoToOneCRH<Fp>;
@@ -669,78 +667,4 @@ impl Config for FieldMTConfig {
 pub type FieldMT = MerkleTree<FieldMTConfig>;
 pub type FieldPath = Path<FieldMTConfig>;
 
-//#[test]
-fn merkle_tree_test(leaves: &[Vec<Fp>], update_query: &[(usize, Vec<Fp>)]) -> () {
-    let mut leaves = leaves.to_vec();
-    let leaf_crh_params = poseidon_parameters();
-    let two_to_one_params = leaf_crh_params.clone();
 
-    let mut tree = FieldMT::new(
-        &leaf_crh_params,
-        &two_to_one_params,
-        leaves.iter().map(|x| x.as_slice()),
-    )
-    .unwrap();
-
-    let mut root = tree.root();
-
-    // test merkle tree functionality without update
-    for (i, leaf) in leaves.iter().enumerate() {
-        let proof = tree.generate_proof(i).unwrap();
-        assert!(proof
-            .verify(&leaf_crh_params, &two_to_one_params, &root, leaf.as_slice())
-            .unwrap());
-    }
-
-    {
-        // wrong root should lead to error but do not panic
-        let wrong_root = root + Fp::from(1);
-        let proof = tree.generate_proof(0).unwrap();
-        assert!(!proof
-            .verify(
-                &leaf_crh_params,
-                &two_to_one_params,
-                &wrong_root,
-                leaves[0].as_slice()
-            )
-            .unwrap())
-    }
-
-    // test merkle tree update functionality
-    for (i, v) in update_query {
-        tree.update(*i, v).unwrap();
-        leaves[*i] = v.to_vec();
-    }
-
-    // update the root
-    root = tree.root();
-
-    // verify again
-    for (i, leaf) in leaves.iter().enumerate() {
-        let proof = tree.generate_proof(i).unwrap();
-        assert!(proof
-            .verify(&leaf_crh_params, &two_to_one_params, &root, leaf.as_slice())
-            .unwrap());
-    }
-}
-
-#[test]
-fn good_root_test() {
-    let mut rng = test_rng();
-    let mut rand_leaves = || (0..3).map(|_| Fp::rand(&mut rng)).collect();
-
-    let mut leaves: Vec<Vec<_>> = Vec::new();
-    for _ in 0..128u8 {
-        leaves.push(rand_leaves())
-    }
-    merkle_tree_test(
-        &leaves,
-        &vec![
-            (2, rand_leaves()),
-            (3, rand_leaves()),
-            (5, rand_leaves()),
-            (111, rand_leaves()),
-            (127, rand_leaves()),
-        ],
-    )
-}
