@@ -1,10 +1,9 @@
 use ark_ff::{MontFp};
 use ark_poly::{univariate::DensePolynomial,Polynomial};
 //pub mod field;
-pub mod test_field;
-use ark_std::iterable::Iterable;
+pub mod sidh_sike_p434;
 //use field::{FqConfig, F as Fp, Fq2 as F};
-use test_field::{F as Fp, Fq2 as F};
+use sidh_sike_p434::{F as Fp, Fq2 as F};
 pub mod matrix;
 use matrix::*;
 pub mod csidh_fri;
@@ -19,28 +18,25 @@ use ark_crypto_primitives::crh::poseidon;
 use ark_ff::UniformRand;
 use std::fs::File;
 use ark_std::test_rng;
-use std::io::{ Write};
 //use ark_crypto_primitives::*;
 pub mod merkle;
 use merkle::{FieldMT, poseidon_parameters, FieldPath};
 use std::time::{Instant};
-use rayon::prelude::*;
 use ark_serialize::{CanonicalSerialize, Compress};
-use pprof::*;
 fn main() {
-    // l_vec contains all the folding factors
+    // l_list contains all the folding factors
     let l_list: Vec<usize> = vec![vec![3; 6], vec![2;2]].concat();
     let mut s: F = MULT_GEN;
     
     
-    for _ in 0..210 {
+    for _ in 0..211 {
         s = s.pow(&[2]);
     }
     for _ in 0..131 {
         s = s.pow(&[3]);
     }
     let mut g: F = s.clone();
-    for _ in 0..6 {
+    for _ in 0..5 {
         g = g.pow(&[2]);
     }
     let r: F = F::new(Fp::from(5), Fp::from(3));
@@ -58,37 +54,31 @@ fn main() {
                                               .naive_mul(&DensePolynomial{coeffs: vec![vec![-F::from(1)], vec![F::from(0); n-1], vec![F::from(1)]].concat()});
     let b_witness: DensePolynomial<F> =  witness.clone() + blinding_factor.clone();
     
-    
-    let b_witness_plus:  DensePolynomial<F> = DensePolynomial{coeffs: b_witness.coeffs.par_iter()
-        .enumerate()
-        .map(|(i, coeff)| coeff*g.pow(&[i as u64]))
-        .collect()};
-    let b_witness_plus_plus: DensePolynomial<F> = DensePolynomial{coeffs: b_witness_plus.coeffs.par_iter()
-        .enumerate()
-        .map(|(i, coeff)| coeff*g.pow(&[i as u64]))
-        .collect()};
-        
-            // psi
     let psi: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("psi_coeffs.txt").unwrap() };
     
     let y_start: F = b_witness.evaluate(&F::from(1));
     let y_end: F = b_witness.evaluate(&g.pow(&[728]));
     
 
-    let s_ord: u64 = 729*64;
+    let s_ord: u64 = 729*32;
     let rep_param: usize = 2;
+    let grinding_param: u8 = 10;
+
+    let mut prover_vec: Vec<u64> = Vec::new();
+    let mut verifier_vec: Vec<u128> = Vec::new();
+    let mut size_vec: Vec<f32> = Vec::new();
+    for _ in 0..50 {
+    let now = Instant::now();
+    let (challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points) = prove(witness.clone(), psi.clone(), g.clone(), s.clone(), r, s_ord, &y_start, &y_end, l_list.clone(), rep_param, grinding_param);
     
-    //let guard = pprof::ProfilerGuardBuilder::default().frequency(1000).build().unwrap();
+    let prover_time:u64 = now.elapsed().as_secs();
+    prover_vec.push(prover_time);
+    println!("Prover Time: {} s", prover_time);
     let now = Instant::now();
-    let (challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points) = prove(witness, psi, g.clone(), s.clone(), r, s_ord, &y_start, &y_end, l_list.clone(), rep_param);
-    println!("Prover Time: {} s", now.elapsed().as_secs());
-   // if let Ok(report) = guard.unwrap().report().build() {
-   //    let file = File::create("flamegraph.svg").unwrap();
-   //     report.flamegraph(file).unwrap();
-    //};
-    let now = Instant::now();
-    let b = verify(challenge_vals.clone(), roots_fri.clone(), roots.clone(), paths_fri.clone(), additional_paths.clone(), points_fri.clone(), additional_points.clone(), g, s, r, &729, s_ord, &y_start, &y_end, l_list, rep_param);
-    println!("Verifier Time: {} ms", now.elapsed().as_millis());
+    let b = verify(challenge_vals.clone(), roots_fri.clone(), roots.clone(), paths_fri.clone(), additional_paths.clone(), points_fri.clone(), additional_points.clone(), g, s, r, &729, s_ord, &y_start, &y_end, l_list.clone(), rep_param, grinding_param);
+    let verifier_time:u128 = now.elapsed().as_millis();
+    verifier_vec.push(verifier_time);
+    println!("Verifier Time: {} ms", verifier_time);
     if b {
         let size1 = challenge_vals.serialized_size(Compress::Yes);
         let size2 = roots.serialized_size(Compress::Yes);
@@ -98,11 +88,16 @@ fn main() {
         let size6 = additional_paths.serialized_size(Compress::Yes);
         let size7 = additional_points.serialized_size(Compress::Yes);
 
-        println!("Proof Size: {} kB", ((size1+size2+size3+size4+size5+size6+size7) as f32)/1024f32);
+        let size_tot = ((size1+size2+size3+size4+size5+size6+size7) as f32)/1024f32;
+        size_vec.push(size_tot);
+        println!("Proof Size: {} kB", size_tot);
         println!("Verification successful");
     } else {
         println!("Verification failed");
     }
+}
+println!("Average Prover Time: {} s", prover_vec.iter().sum::<u64>()/50);
+println!("Average Verifier Time: {} ms", verifier_vec.iter().sum::<u128>()/50);
     return;
 }
 
@@ -113,56 +108,10 @@ fn calculate_hash<T: Hash>(t: &T, n: u64) -> u64 {
     s.finish() % n
 }
 
-fn raise_to_power(x: F, v: u64, n: u8) -> F {
-    let mut s = x;
-    for i in 0..n{
-    s = s.pow(&[v]);}
-s
-}
-
-
-fn write_to_file(interp_poly: &Vec<F>) -> std::io::Result<()> {
-    let mut file = File::create("interp_poly_coeffs.txt")?;
-for i in interp_poly.iter() {
-    let mut i0: Fp = Fp::from(0);let mut i1: Fp = Fp::from(0);
-    if !(i.c0==Fp::from(0)) {i0 = i.c0;}
-    if !(i.c1==Fp::from(0)) {i1 = i.c1;}
-    writeln!(file, "{}, {}", i0, i1)?;
-}
-
-Ok(())}
-
-use std::{
-    io::{self, BufRead, BufReader},
-    path::Path,
-};
+use ark_std::path::Path;
 use std::str::FromStr;
-fn lines_from_file(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
-    BufReader::new(File::open(filename)?).lines()
-    .map(|line| {
-        let line = line?;
-        let mut parts = line.trim().split(",");
-        let a: Fp;
-        let b: Fp;
-        let a_tentative = Fp::from_str(parts.next().unwrap());
-        match a_tentative {
-            Ok(a_val) => a = a_val,
-            Err(_) => a = Fp::from(0),
-        }
-        let b_tentative = Fp::from_str(parts.next().unwrap());
-        match b_tentative {
-            Ok(b_val) => b = b_val,
-            Err(_) => b = Fp::from(0),
-        }
-        //let a: Fp = Fp::from_str(parts.next().unwrap()).unwrap();
-        //let b: Fp = Fp::from_str(parts.next().unwrap()).unwrap();
-        //println!("yes");
-        Ok(F::new(a,b))
-    })
-    .collect()
-}
-
-fn lines_from_file_2(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
+use std::io::{BufReader, Result, BufRead};
+fn lines_from_file_2(filename: impl AsRef<Path>) -> Result<Vec<F>> {
     BufReader::new(File::open(filename)?).lines()
     .map(|line| {
         let line = line?;
@@ -191,9 +140,9 @@ fn lines_from_file_2(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
     })
     .collect()
 }
-// This element has order 2^16
-const FFT_GEN: F = F::new(MontFp!("17231939763216297887217622266809272467545088513556272765685947455324509609957290372982961616729012186542372231626409308935024145447"), MontFp!("14794844963276765294078403131215971792257250447333909245841623048180831260548488349233598857775988700515612163307689388891415390090"));
+
 // This is the multiplicative generator of the field ^(l-2)
 // It has order 2^217*3^136
 const MULT_GEN: F = F::new(MontFp!("4887884732269044310381829002291498723817156048752319302265161467241044247866395345194043334365723689179743805338576987868462946714"), MontFp!("9775769464538088620763658004582997447634312097504638604530322934482088495732790690388086668731447378359487610677153975736925893426"));
 // This function computes the FFT of a polynomial over the finite field F
+

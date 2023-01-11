@@ -1,4 +1,4 @@
-use ark_ff::{Fp448, MontBackend, Fp2, MontFp, Fp2Config, Field, FftField};
+use ark_ff::{Fp448, MontBackend, Fp2, MontFp, Fp2Config};
 
 
 #[derive(ark_ff::fp::MontConfig)]
