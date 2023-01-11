@@ -3,7 +3,7 @@ use ark_ff::UniformRand;
 use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_std::test_rng;
 use merkle::{poseidon_parameters, FieldMT};
-use rayon::prelude::*;
+
 use std::ops::{Div, Sub};
 
 // Witness is the witness polynomial, psi the inverse of w(x)-w(g^2x), g the generator of the interpolation domain,
@@ -24,12 +24,12 @@ pub fn prove(
         coeffs: vec![vec![-F::from(1)], vec![F::from(0); n - 1], vec![F::from(1)]].concat(),
     });
 
-    let b_witness: DensePolynomial<F> = witness.clone() + blinding_factor.clone();
+    let b_witness: DensePolynomial<F> = witness + blinding_factor;
     let b_witness_plus: DensePolynomial<F> = DensePolynomial {
-        coeffs: b_witness.coeffs.par_iter().enumerate().map(|(i, coeff)| coeff * g.pow(&[i as u64])).collect(),
+        coeffs: b_witness.coeffs.par_iter().enumerate().map(|(i, coeff)| coeff * g.pow([i as u64])).collect(),
     };
     let b_witness_plus_plus: DensePolynomial<F> = DensePolynomial {
-        coeffs: b_witness_plus.coeffs.par_iter().enumerate().map(|(i, coeff)| coeff * g.pow(&[i as u64])).collect(),
+        coeffs: b_witness_plus.coeffs.par_iter().enumerate().map(|(i, coeff)| coeff * g.pow([i as u64])).collect(),
     };
 
     // Commit to the blinded witness and psi
@@ -61,21 +61,21 @@ pub fn prove(
     let mut roots: Vec<Fp> = vec![witness_mtree.root(), psi_mtree.root()];
     //let roots: Vec<Fp> = vec![Fp::from(0)];
 
-    let alpha_1: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, roots[..2].to_vec().clone()).unwrap(), Fp::from(0));
+    let alpha_1: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, roots[..2].to_vec()).unwrap(), Fp::from(0));
     let alpha_2: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_1.c0]).unwrap(), Fp::from(0));
     let alpha_3: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_2.c0]).unwrap(), Fp::from(0));
     let alpha_4: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_3.c0]).unwrap(), Fp::from(0));
 
     // Compute C(x)
-    let c1: DensePolynomial<F> = initial_poly(&y_start, b_witness.clone());
+    let c1: DensePolynomial<F> = initial_poly(y_start, b_witness.clone());
     let c2: DensePolynomial<F> = mod_poly_poly(&b_witness, &b_witness_plus, n, g);
     let c3: DensePolynomial<F> = psi_poly(&b_witness, &b_witness_plus_plus, &psi, n, g);
-    let c4: DensePolynomial<F> = final_poly(&y_end, b_witness.clone(), g, n as u64);
+    let c4: DensePolynomial<F> = final_poly(y_end, b_witness.clone(), g, n as u64);
 
     let c: DensePolynomial<F> = compute_c(c1, c2, c3, c4, &vec![alpha_1, alpha_2, alpha_3, alpha_4], &n);
 
     // Evaluate C(x) on E and commit
-    let c_evals: Vec<F> = D_0.clone().into_par_iter().map(|x| c.evaluate(&x)).collect();
+    let c_evals: Vec<F> = D_0.into_par_iter().map(|x| c.evaluate(&x)).collect();
     let mut c_evals_merkle: Vec<Vec<Fp>> = c_evals.par_iter().map(|x| vec![x.c0, x.c1]).collect();
 
     c_evals_merkle =
@@ -121,7 +121,7 @@ pub fn prove(
             + DensePolynomial {
                 coeffs: vec![vec![F::from(0); E - n], vec![F::new(zeta_vec[2], Fp::from(0))]].concat(),
             }
-            .naive_mul(&(b_witness.clone() + DensePolynomial { coeffs: vec![-challenge_vals[2]] }))
+            .naive_mul(&(b_witness + DensePolynomial { coeffs: vec![-challenge_vals[2]] }))
             .div(&DensePolynomial { coeffs: vec![-ggz, F::from(1)] })
             + DensePolynomial {
                 coeffs: vec![vec![F::from(0); E - n - 1], vec![F::new(zeta_vec[3], Fp::from(0))]].concat(),
@@ -132,7 +132,7 @@ pub fn prove(
                 .naive_mul(&(c + DensePolynomial { coeffs: vec![-challenge_vals[4]] }))
                 .div(&DensePolynomial { coeffs: vec![-z, F::from(1)] });
 
-    let (paths_fri, points_fri, roots_fri, indices) = fri_prove(p.clone(), l_list, s, r, s_ord, rep_param);
+    let (paths_fri, points_fri, roots_fri, indices) = fri_prove(p, l_list, s, r, s_ord, rep_param);
 
     let mut witness_query_vals: Vec<F> = vec![];
     let mut psi_query_vals: Vec<F> = vec![];
@@ -189,36 +189,36 @@ pub fn verify(
         points_fri,
         roots_fri,
         l_list,
-        s.clone(),
-        r.clone(),
-        s_ord.clone(),
+        s,
+        r,
+        s_ord,
         rep_param as u8,
     );
     // Check that the challenges were computed correctly
     let E: u64 = 32 * n / 9;
     let c1: F = initial_challenge(y_start, &challenges[0], &z);
-    let c2: F = mod_challenge(&challenges[0], &challenges[1], &z, &g, &n);
+    let c2: F = mod_challenge(&challenges[0], &challenges[1], &z, &g, n);
     let c3: F = psi_challenge(&challenges[0], &challenges[2], &challenges[3], &z, n, &g);
     let c4: F = final_challenge(y_end, &challenges[0], &z, n, &g);
 
-    let asserted_c: F = alpha_1 * z.pow(&[E - n - 2]) * c1
-        + alpha_2 * z.pow(&[E - 3 * n - 13]) * c2
-        + alpha_3 * z.pow(&[E - n - 5]) * c3
-        + alpha_4 * z.pow(&[E - n - 2]) * c4;
+    let asserted_c: F = alpha_1 * z.pow([E - n - 2]) * c1
+        + alpha_2 * z.pow([E - 3 * n - 13]) * c2
+        + alpha_3 * z.pow([E - n - 5]) * c3
+        + alpha_4 * z.pow([E - n - 2]) * c4;
     assert_eq!(asserted_c, challenges[4]);
 
     // Check consistency between P(x) in FRI and the committed-to polynomials
     for (i, index) in indices_first.iter().enumerate() {
-        let x_0: F = r * s.pow(&[*index as u64]);
+        let x_0: F = r * s.pow([*index as u64]);
 
         let witness_val: F = additional_points[0][i];
         let psi_val: F = additional_points[1][i];
         let c_val: F = additional_points[2][i];
-        let asserted_p: F = F::new(zeta_vec[0], Fp::from(0)) * x_0.pow(&[E - n]) * (witness_val - challenges[0])
+        let asserted_p: F = F::new(zeta_vec[0], Fp::from(0)) * x_0.pow([E - n]) * (witness_val - challenges[0])
             / (x_0 - z)
-            + F::new(zeta_vec[1], Fp::from(0)) * x_0.pow(&[E - n]) * (witness_val - challenges[1]) / (x_0 - gz)
-            + F::new(zeta_vec[2], Fp::from(0)) * x_0.pow(&[E - n]) * (witness_val - challenges[2]) / (x_0 - ggz)
-            + F::new(zeta_vec[3], Fp::from(0)) * x_0.pow(&[E - n - 1]) * (psi_val - challenges[3]) / (x_0 - z)
+            + F::new(zeta_vec[1], Fp::from(0)) * x_0.pow([E - n]) * (witness_val - challenges[1]) / (x_0 - gz)
+            + F::new(zeta_vec[2], Fp::from(0)) * x_0.pow([E - n]) * (witness_val - challenges[2]) / (x_0 - ggz)
+            + F::new(zeta_vec[3], Fp::from(0)) * x_0.pow([E - n - 1]) * (psi_val - challenges[3]) / (x_0 - z)
             + F::new(zeta_vec[4], Fp::from(0)) * (c_val - challenges[4]) / (x_0 - z);
         assert_eq!(asserted_p, points_first[i]);
         // Verify Merkle Paths
@@ -243,7 +243,7 @@ pub fn mod_challenge(x: &F, y: &F, z: &F, g: &F, T: &u64) -> F {
         + F::from(8748000000u128) * (x + y)
         - F::from(157464000000000u128);
 
-    (z - g.pow(&[*T - 1])) * eval / (z.pow(&[*T]) - F::from(1))
+    (z - g.pow([*T - 1])) * eval / (z.pow([*T]) - F::from(1))
 }
 
 // Returns (p(x)-y_0)/(x - 1)
@@ -253,7 +253,7 @@ pub fn initial_poly(y_0: &F, p: DensePolynomial<F>) -> DensePolynomial<F> {
 
 // Returns (p(x)-y_end)/(x - g^(T-1))
 pub fn final_poly(y_end: &F, p: DensePolynomial<F>, g: F, T: u64) -> DensePolynomial<F> {
-    (p + DensePolynomial { coeffs: vec![-*y_end] }).div(&DensePolynomial { coeffs: vec![-g.pow(&[T - 1]), F::from(1)] })
+    (p + DensePolynomial { coeffs: vec![-*y_end] }).div(&DensePolynomial { coeffs: vec![-g.pow([T - 1]), F::from(1)] })
 }
 
 // Returns the composite polynomial
@@ -290,7 +290,7 @@ pub fn mod_poly_poly(p: &DensePolynomial<F>, q: &DensePolynomial<F>, T: usize, g
         + DensePolynomial { coeffs: vec![F::from(8748000000u128)] }.naive_mul(&(p + q))
         + DensePolynomial { coeffs: vec![-F::from(157464000000000u128)] };
 
-    temp.naive_mul(&DensePolynomial { coeffs: vec![-g.pow(&[T as u64 - 1]), F::from(1)] })
+    temp.naive_mul(&DensePolynomial { coeffs: vec![-g.pow([T as u64 - 1]), F::from(1)] })
         .div(&DensePolynomial { coeffs: [vec![-F::from(1)], vec![F::from(0); T - 1], vec![F::from(1)]].concat() })
 }
 
@@ -298,7 +298,7 @@ pub fn initial_challenge(y_0: &F, eval: &F, x_0: &F) -> F {
     (eval - y_0) / (x_0 - F::from(1))
 }
 pub fn final_challenge(y_end: &F, eval: &F, x_0: &F, n: &u64, g: &F) -> F {
-    (eval - y_end) / (x_0 - g.pow(&[*n - 1]))
+    (eval - y_end) / (x_0 - g.pow([*n - 1]))
 }
 
 //Returns ((x-g^(T-2))*(x-g^(T-1))*(p(x)-q(x))*psi(x)-1)/(x^T-1)
@@ -306,7 +306,7 @@ pub fn psi_poly(
     p: &DensePolynomial<F>, q: &DensePolynomial<F>, psi: &DensePolynomial<F>, T: usize, g: F,
 ) -> DensePolynomial<F> {
     let diff: DensePolynomial<F> = p.sub(q);
-    let g_pow: F = g.pow(&[T as u64 - 2]);
+    let g_pow: F = g.pow([T as u64 - 2]);
     let x_1_poly: DensePolynomial<F> = DensePolynomial { coeffs: vec![-g_pow, F::from(1)] }
         .naive_mul(&DensePolynomial { coeffs: vec![-g_pow * g, F::from(1)] });
 
@@ -316,8 +316,8 @@ pub fn psi_poly(
 }
 
 pub fn psi_challenge(y_witness: &F, y_witness_plusplus: &F, y_psi: &F, x_0: &F, n: &u64, g: &F) -> F {
-    let g_pow: F = g.pow(&[*n as u64 - 2]);
+    let g_pow: F = g.pow([*n - 2]);
     let g_prefactor: F = (x_0 - g_pow) * (x_0 - g_pow * g);
 
-    g_prefactor * ((y_witness - y_witness_plusplus) * y_psi - F::from(1)) / (x_0.pow(&[*n]) - F::from(1))
+    g_prefactor * ((y_witness - y_witness_plusplus) * y_psi - F::from(1)) / (x_0.pow([*n]) - F::from(1))
 }

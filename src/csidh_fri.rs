@@ -9,7 +9,7 @@ pub fn fold(f: &DensePolynomial<F>, l: u8, theta: F) -> DensePolynomial<F> {
     let mut g_polys: Vec<Vec<F>> = Vec::new();
     let d = (((Polynomial::degree(f)) / (l as usize)) as f32).floor() as usize + 1;
     for j in 0..l {
-        let th = theta.pow(&[j as u64]);
+        let th = theta.pow([j as u64]);
         // The g are the g_i such that f(x) = x^i*g_i(x^l)
         let mut g: Vec<F> = vec![F::from(0); d];
 
@@ -24,10 +24,10 @@ pub fn fold(f: &DensePolynomial<F>, l: u8, theta: F) -> DensePolynomial<F> {
         //println!("Length g: {:?}", g.len());
         g_polys.push(g);
     }
-    let mut final_g = vec![F::from(0); d as usize];
+    let mut final_g = vec![F::from(0); d];
     for j in 0..d {
         for poly in g_polys.iter() {
-            final_g[j as usize] += poly[j as usize];
+            final_g[j] += poly[j];
         }
     }
     while final_g.last().unwrap() == &F::from(0) {
@@ -43,7 +43,7 @@ pub fn round_commit(f_folded: &DensePolynomial<F>, s: &F, r: &F, s_ord: &u64) ->
     let two_to_one_params = leaf_crh_params.clone();
 
     let D: Vec<F> = (0..*s_ord).into_par_iter().map(|i| r * s.pow([i])).collect();
-    let point_vec: Vec<F> = D.clone().into_par_iter().map(|x| f_folded.evaluate(&x)).collect();
+    let point_vec: Vec<F> = D.into_par_iter().map(|x| f_folded.evaluate(&x)).collect();
     let k = (((*s_ord as f32).log2()).ceil()) as u32;
     let mut eval_vec: Vec<Vec<Fp>> = point_vec.par_iter().map(|x| vec![x.c0, x.c1]).collect();
     eval_vec = vec![eval_vec, vec![vec![Fp::from(0), Fp::from(0)]; 2u64.pow(k) as usize - *s_ord as usize]].concat();
@@ -73,9 +73,9 @@ pub fn commit(
     folded_polys.push(f);
     for i in 0..n_rounds {
         folded_polys.push(fold(folded_polys.last().unwrap(), l_list[i] as u8, theta_vec[i]));
-        r = r.pow(&[l_list[i] as u64]);
-        s = s.pow(&[l_list[i] as u64]);
-        s_ord = s_ord / (l_list[i] as u64);
+        r = r.pow([l_list[i] as u64]);
+        s = s.pow([l_list[i] as u64]);
+        s_ord /= l_list[i] as u64;
         let (m, r, p) = round_commit(folded_polys.last().unwrap(), &s, &r, &s_ord);
         roots.push(r);
         mtrees.push(m);
@@ -118,7 +118,7 @@ pub fn query(
     indices.push(calculate_hash(&l_list, n as u64));
     for _ in 0..alpha {
         indices_first.push(*indices.last().unwrap() as usize);
-        let mut s_ord = n.clone();
+        let mut s_ord = n;
         for (i, l) in l_list.iter().enumerate() {
             let index = *indices.last().unwrap() as usize;
             let (m, p) = query_at_index(
@@ -143,7 +143,7 @@ pub fn query(
 pub fn fri_prove(
     f: DensePolynomial<F>, l_list: Vec<usize>, s: F, r: F, s_ord: u64, alpha: usize,
 ) -> (Vec<FieldPath>, Vec<F>, Vec<Fp>, Vec<usize>) {
-    let (mtrees, mroots, evals) = commit(f, l_list.clone(), s, r, s_ord.clone());
+    let (mtrees, mroots, evals) = commit(f, l_list.clone(), s, r, s_ord);
 
     let (paths, points, indices) = query(mtrees, evals, l_list, s_ord as usize, alpha);
 
@@ -157,16 +157,16 @@ pub fn verify_fold_at_index(points: Vec<F>, x: F, t: F, l: usize, theta: F) -> b
     let mut mat: Vec<Vec<F>> = Vec::new();
     for i in 0..l {
         let mut vec_i: Vec<F> = Vec::new();
-        let z: F = t.pow(&[i as u64]) * x;
+        let z: F = t.pow([i as u64]) * x;
         for j in 0..l {
-            vec_i.push(z.pow(&[j as u64]));
+            vec_i.push(z.pow([j as u64]));
         }
         mat.push(vec_i);
     }
     let g_vec = solve_linear_system(mat, z_vec);
     let mut y_supposedly: F = F::from(0);
     for (i, val) in g_vec.iter().enumerate() {
-        y_supposedly += theta.pow(&[i as u64]) * val;
+        y_supposedly += theta.pow([i as u64]) * val;
     }
     //println!("Res: {:?}", y == y_supposedly);
     y == y_supposedly
@@ -189,10 +189,10 @@ pub fn fri_verify(
     s_ord_vals.push(s_ord);
     r_vals.push(r);
     for (i, l) in l_list.as_slice().iter().enumerate() {
-        t_vals.push(s.pow(&[s_ord / (*l as u64)]));
+        t_vals.push(s.pow([s_ord / (*l as u64)]));
 
-        r_vals.push(r_vals[i].pow(&[*l as u64]));
-        s_vals.push(s_vals[i].pow(&[*l as u64]));
+        r_vals.push(r_vals[i].pow([*l as u64]));
+        s_vals.push(s_vals[i].pow([*l as u64]));
         s_ord_vals.push(s_ord_vals[i] / (*l as u64));
     }
     // Define all the thetas using Fiat-Shamir
@@ -204,7 +204,7 @@ pub fn fri_verify(
         rr.push(*root);
         theta_vec.push(F::new(poseidon::CRH::<Fp>::evaluate(&params, rr.clone()).unwrap(), Fp::from(0)));
     }
-    let mut indices: Vec<u64> = vec![calculate_hash(&l_list, s_ord as u64)];
+    let mut indices: Vec<u64> = vec![calculate_hash(&l_list, s_ord)];
     let mut i: usize = 0;
     for __ in 0..alpha {
         //points_first.push(queried_points[i]);
@@ -240,15 +240,15 @@ pub fn fri_verify(
         for (i, l) in l_list.as_slice().iter().enumerate() {
             let index = *indices.last().unwrap();
             assert!(verify_fold_at_index(
-                queried_points[0..*l as usize + 1].to_vec(),
-                s_vals[i].pow(&[index]) * r_vals[i],
+                queried_points[0..*l + 1].to_vec(),
+                s_vals[i].pow([index]) * r_vals[i],
                 t_vals[i],
-                *l as usize,
+                *l,
                 theta_vec[i]
             ));
-            indices.push(calculate_hash(&indices, s_ord_vals[i] as u64));
-            paths.drain(0..*l as usize + 1);
-            queried_points.drain(0..*l as usize + 1);
+            indices.push(calculate_hash(&indices, s_ord_vals[i]));
+            paths.drain(0..*l + 1);
+            queried_points.drain(0..*l + 1);
         }
     }
 

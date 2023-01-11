@@ -230,7 +230,7 @@ pub fn poseidon_parameters() -> PoseidonConfig<Fp> {
 }
 
 //#[test]
-fn merkle_tree_test(leaves: &[Vec<Fp>], update_query: &[(usize, Vec<Fp>)]) -> () {
+fn merkle_tree_test(leaves: &[Vec<Fp>], update_query: &[(usize, Vec<Fp>)]) {
     let mut leaves = leaves.to_vec();
     let leaf_crh_params = poseidon_parameters();
     let two_to_one_params = leaf_crh_params.clone();

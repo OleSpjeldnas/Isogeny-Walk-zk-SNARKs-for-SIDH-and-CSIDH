@@ -2,7 +2,7 @@ use super::*;
 
 pub fn mod_poly_eval_at_y_div_by_x_minus_z(y: F, z: F) -> Vec<F> {
     let mod_poly_at_y: Vec<F> = vec![
-        -F::from(157464000000000u128) + F::from(8748000000u128) * y - F::from(162000u128) * y.square() + y.pow(&[3]),
+        -F::from(157464000000000u128) + F::from(8748000000u128) * y - F::from(162000u128) * y.square() + y.pow([3]),
         F::from(8748000000u128) + F::from(40773375u128) * y + F::from(1488u128) * y.square(),
         F::from(1488u128) * y - F::from(162000u128) - y.square(),
         F::from(1),

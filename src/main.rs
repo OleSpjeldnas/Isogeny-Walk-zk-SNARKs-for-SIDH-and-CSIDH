@@ -40,14 +40,14 @@ fn main() {
     let mut s: F = MULT_GEN;
 
     for _ in 0..210 {
-        s = s.pow(&[2]);
+        s = s.pow([2]);
     }
     for _ in 0..131 {
-        s = s.pow(&[3]);
+        s = s.pow([3]);
     }
-    let mut g: F = s.clone();
+    let mut g: F = s;
     for _ in 0..6 {
-        g = g.pow(&[2]);
+        g = g.pow([2]);
     }
     let r: F = F::new(Fp::from(5), Fp::from(3));
 
@@ -62,17 +62,17 @@ fn main() {
     let blinding_factor: DensePolynomial<F> = DensePolynomial { coeffs: vec![a, b, c] }.naive_mul(&DensePolynomial {
         coeffs: vec![vec![-F::from(1)], vec![F::from(0); n - 1], vec![F::from(1)]].concat(),
     });
-    let b_witness: DensePolynomial<F> = witness.clone() + blinding_factor.clone();
+    let b_witness: DensePolynomial<F> = witness.clone() + blinding_factor;
 
-    let b_witness_plus: DensePolynomial<F> = DensePolynomial {
-        coeffs: b_witness.coeffs.par_iter().enumerate().map(|(i, coeff)| coeff * g.pow(&[i as u64])).collect(),
+    let _b_witness_plus: DensePolynomial<F> = DensePolynomial {
+        coeffs: b_witness.coeffs.par_iter().enumerate().map(|(i, coeff)| coeff * g.pow([i as u64])).collect(),
     };
 
     // psi
     let psi: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("psi_coeffs.txt").unwrap() };
 
     let y_start: F = b_witness.evaluate(&F::from(1));
-    let y_end: F = b_witness.evaluate(&g.pow(&[728]));
+    let y_end: F = b_witness.evaluate(&g.pow([728]));
 
     let s_ord: u64 = 729 * 64;
     let rep_param: usize = 2;
@@ -80,7 +80,7 @@ fn main() {
     //let guard = pprof::ProfilerGuardBuilder::default().frequency(1000).build().unwrap();
     let now = Instant::now();
     let (challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points) =
-        prove(witness, psi, g.clone(), s.clone(), r, s_ord, &y_start, &y_end, l_list.clone(), rep_param);
+        prove(witness, psi, g, s, r, s_ord, &y_start, &y_end, l_list.clone(), rep_param);
     println!("Prover Time: {} s", now.elapsed().as_secs());
     // if let Ok(report) = guard.unwrap().report().build() {
     //    let file = File::create("flamegraph.svg").unwrap();
@@ -120,7 +120,6 @@ fn main() {
     } else {
         println!("Verification failed");
     }
-    return;
 }
 
 fn calculate_hash<T: Hash>(t: &T, n: u64) -> u64 {
@@ -131,7 +130,7 @@ fn calculate_hash<T: Hash>(t: &T, n: u64) -> u64 {
 
 fn raise_to_power(mut s: F, v: u64, n: u8) -> F {
     for _ in 0..n {
-        s = s.pow(&[v]);
+        s = s.pow([v]);
     }
     s
 }
@@ -143,10 +142,10 @@ fn write_to_file(interp_poly: &Vec<F>) -> std::io::Result<()> {
         let mut i1: Fp = Fp::from(0);
 
         // TODO: Obfuscated logic (what is the intention here)
-        if !(i.c0 == Fp::from(0)) {
+        if i.c0 != Fp::from(0) {
             i0 = i.c0;
         }
-        if !(i.c1 == Fp::from(0)) {
+        if i.c1 != Fp::from(0) {
             i1 = i.c1;
         }
         writeln!(file, "{i0}, {i1}")?;
@@ -160,7 +159,7 @@ fn lines_from_file(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
         .lines()
         .map(|line| {
             let line = line?;
-            let mut parts = line.trim().split(",");
+            let mut parts = line.trim().split(',');
 
             let a = match Fp::from_str(parts.next().unwrap()) {
                 Ok(a_val) => a_val,
