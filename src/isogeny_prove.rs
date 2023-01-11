@@ -184,16 +184,8 @@ pub fn verify(
         zeta_vec.push(poseidon::CRH::<Fp>::evaluate(&params, zeta_vec.clone()).unwrap());
     }
     // Check that the FRI queries are correct
-    let (points_first, indices_first) = fri_verify(
-        paths_fri,
-        points_fri,
-        roots_fri,
-        l_list,
-        s,
-        r,
-        s_ord,
-        rep_param as u8,
-    );
+    let (points_first, indices_first) =
+        fri_verify(paths_fri, points_fri, roots_fri, l_list, s, r, s_ord, rep_param as u8);
     // Check that the challenges were computed correctly
     let E: u64 = 32 * n / 9;
     let c1: F = initial_challenge(y_start, &challenges[0], &z);
