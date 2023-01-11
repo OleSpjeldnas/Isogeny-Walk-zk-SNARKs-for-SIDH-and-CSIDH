@@ -4,13 +4,12 @@ use ark_crypto_primitives::{
     merkle_tree::{Config, IdentityDigestConverter},
     MerkleTree, Path,
 };
-use ark_ff::UniformRand;
 use ark_sponge::poseidon::PoseidonConfig;
-use ark_std::test_rng;
 use std::str::FromStr;
 
 type H = poseidon::CRH<Fp>;
 type TwoToOneH = poseidon::TwoToOneCRH<Fp>;
+
 pub fn poseidon_parameters() -> PoseidonConfig<Fp> {
     let full_rounds = 8;
     let partial_rounds = 29;

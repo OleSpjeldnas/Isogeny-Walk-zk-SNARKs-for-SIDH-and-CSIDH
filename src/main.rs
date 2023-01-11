@@ -7,7 +7,6 @@ use csidh_fri::*;
 use isogeny_prove::{prove, verify};
 use matrix::*;
 use merkle::{poseidon_parameters, FieldMT, FieldPath};
-use pprof::*;
 use rayon::prelude::*;
 use std::{
     collections::hash_map::DefaultHasher,
@@ -20,6 +19,7 @@ use std::{
 };
 use test_field::{Fq2 as F, F as Fp};
 
+// TODO: Move to separate crate
 pub mod csidh_fri;
 pub mod get_roots;
 pub mod isogeny_prove;
@@ -66,9 +66,6 @@ fn main() {
 
     let b_witness_plus: DensePolynomial<F> = DensePolynomial {
         coeffs: b_witness.coeffs.par_iter().enumerate().map(|(i, coeff)| coeff * g.pow(&[i as u64])).collect(),
-    };
-    let b_witness_plus_plus: DensePolynomial<F> = DensePolynomial {
-        coeffs: b_witness_plus.coeffs.par_iter().enumerate().map(|(i, coeff)| coeff * g.pow(&[i as u64])).collect(),
     };
 
     // psi
@@ -132,9 +129,8 @@ fn calculate_hash<T: Hash>(t: &T, n: u64) -> u64 {
     s.finish() % n
 }
 
-fn raise_to_power(x: F, v: u64, n: u8) -> F {
-    let mut s = x;
-    for i in 0..n {
+fn raise_to_power(mut s: F, v: u64, n: u8) -> F {
+    for _ in 0..n {
         s = s.pow(&[v]);
     }
     s

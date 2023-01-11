@@ -1,8 +1,8 @@
 use rayon::prelude::*;
-use std::ops::{Div, Mul, Sub};
+use std::ops::{Div, Sub};
 
 use super::*;
-use ark_ff::{FftField, UniformRand};
+use ark_ff::UniformRand;
 use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_std::test_rng;
 use merkle::{poseidon_parameters, FieldMT};
@@ -105,9 +105,11 @@ pub fn prove(
 
     // Finally, create and commit to the composition polynomial P(x)
     let mut zeta_vec: Vec<Fp> = vec![poseidon::CRH::<Fp>::evaluate(&params, vec![z.c0]).unwrap()];
+
     for _ in 0..4 {
         zeta_vec.push(poseidon::CRH::<Fp>::evaluate(&params, zeta_vec.clone()).unwrap());
     }
+
     let p: DensePolynomial<F> =
         DensePolynomial { coeffs: vec![vec![F::from(0); E - n], vec![F::new(zeta_vec[0], Fp::from(0))]].concat() }
             .naive_mul(&(b_witness.clone() + DensePolynomial { coeffs: vec![-challenge_vals[0]] }))
@@ -134,21 +136,15 @@ pub fn prove(
     let (paths_fri, points_fri, roots_fri, indices) = fri_prove(p.clone(), l_list, s, r, s_ord, rep_param);
 
     let mut witness_query_vals: Vec<F> = vec![];
-    let mut witness_plus_query_vals: Vec<F> = vec![];
-    let mut witness_plus_plus_query_vals: Vec<F> = vec![];
     let mut psi_query_vals: Vec<F> = vec![];
     let mut c_query_vals: Vec<F> = vec![];
 
     let mut witness_query_path: Vec<FieldPath> = vec![];
-    let mut witness_plus_query_path: Vec<FieldPath> = vec![];
-    let mut witness_plus_plus_query_path: Vec<FieldPath> = vec![];
     let mut psi_query_path: Vec<FieldPath> = vec![];
     let mut c_query_path: Vec<FieldPath> = vec![];
-    let plus_index: usize = (s_ord as usize) / n;
 
     for index in indices.iter() {
         let z_ind: usize = *index;
-        let x_0: F = r * s.pow(&[*index as u64]);
         witness_query_vals.push(witness_evals[z_ind]);
         psi_query_vals.push(psi_evals[z_ind]);
         c_query_vals.push(c_evals[z_ind]);
@@ -255,12 +251,12 @@ pub fn initial_poly(y_0: &F, p: DensePolynomial<F>) -> DensePolynomial<F> {
     (p + DensePolynomial { coeffs: vec![-*y_0] }).div(&DensePolynomial { coeffs: vec![F::from(-1), F::from(1)] })
 }
 
-//Returns (p(x)-y_end)/(x - g^(T-1))
+// Returns (p(x)-y_end)/(x - g^(T-1))
 pub fn final_poly(y_end: &F, p: DensePolynomial<F>, g: F, T: u64) -> DensePolynomial<F> {
     (p + DensePolynomial { coeffs: vec![-*y_end] }).div(&DensePolynomial { coeffs: vec![-g.pow(&[T - 1]), F::from(1)] })
 }
 
-//Returns the composite polynomial
+// Returns the composite polynomial
 pub fn compute_c(
     c1: DensePolynomial<F>, c2: DensePolynomial<F>, c3: DensePolynomial<F>, c4: DensePolynomial<F>, alphas: &Vec<F>,
     T: &usize,

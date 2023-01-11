@@ -1,4 +1,4 @@
-use ark_ff::{FftField, Field, Fp2, Fp2Config, Fp448, MontBackend, MontFp};
+use ark_ff::{Fp2, Fp2Config, Fp448, MontBackend, MontFp};
 
 #[derive(ark_ff::fp::MontConfig)]
 #[modulus = "24439423661345221551909145011457493619085780243761596511325807336205221239331976725970216671828618445898719026692884939342314733567"]

@@ -26,10 +26,6 @@ pub fn find_roots(roots_arr: &mut Vec<F>, n: usize) -> Vec<F> {
     roots_arr.to_vec()
 }
 
-use std::collections::HashMap;
-
-use std::ops::Mul;
-
 fn zassenhaus(poly: Vec<F>) -> Vec<Vec<F>> {
     let n = poly.len() - 1;
     let mut factors = Vec::new();
