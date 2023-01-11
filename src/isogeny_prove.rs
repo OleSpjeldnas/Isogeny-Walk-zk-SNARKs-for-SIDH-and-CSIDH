@@ -1,11 +1,10 @@
-use rayon::prelude::*;
-use std::ops::{Div, Sub};
-
 use super::*;
 use ark_ff::UniformRand;
 use ark_poly::polynomial::univariate::DensePolynomial;
 use ark_std::test_rng;
 use merkle::{poseidon_parameters, FieldMT};
+use rayon::prelude::*;
+use std::ops::{Div, Sub};
 
 // Witness is the witness polynomial, psi the inverse of w(x)-w(g^2x), g the generator of the interpolation domain,
 // the evaluation domain is E = r<s>. Finally, s_ord is the size of E.   ->    (Challenges, roots, roots_fri, paths_fri, paths, points_fri, points)

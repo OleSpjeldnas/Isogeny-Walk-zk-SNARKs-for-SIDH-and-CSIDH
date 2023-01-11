@@ -10,6 +10,19 @@ use std::str::FromStr;
 type H = poseidon::CRH<Fp>;
 type TwoToOneH = poseidon::TwoToOneCRH<Fp>;
 
+pub struct FieldMTConfig;
+impl Config for FieldMTConfig {
+    type Leaf = [Fp];
+    type LeafDigest = Fp;
+    type LeafInnerDigestConverter = IdentityDigestConverter<Fp>;
+    type InnerDigest = Fp;
+    type LeafHash = H;
+    type TwoToOneHash = TwoToOneH;
+}
+
+pub type FieldMT = MerkleTree<FieldMTConfig>;
+pub type FieldPath = Path<FieldMTConfig>;
+
 pub fn poseidon_parameters() -> PoseidonConfig<Fp> {
     let full_rounds = 8;
     let partial_rounds = 29;
@@ -215,18 +228,6 @@ pub fn poseidon_parameters() -> PoseidonConfig<Fp> {
 
     PoseidonConfig::<Fp>::new(full_rounds, partial_rounds, alpha, mds, ark, 2, 1)
 }
-pub struct FieldMTConfig;
-impl Config for FieldMTConfig {
-    type Leaf = [Fp];
-    type LeafDigest = Fp;
-    type LeafInnerDigestConverter = IdentityDigestConverter<Fp>;
-    type InnerDigest = Fp;
-    type LeafHash = H;
-    type TwoToOneHash = TwoToOneH;
-}
-
-pub type FieldMT = MerkleTree<FieldMTConfig>;
-pub type FieldPath = Path<FieldMTConfig>;
 
 //#[test]
 fn merkle_tree_test(leaves: &[Vec<Fp>], update_query: &[(usize, Vec<Fp>)]) -> () {
