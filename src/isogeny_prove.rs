@@ -45,16 +45,15 @@ pub fn prove(witness: DensePolynomial<F>, psi: DensePolynomial<F>, g: F, s: F, r
     let psi_evals: Vec<F> = D_0.clone().into_iter()
     .map(|x| psi.evaluate(&x))
     .collect();
-    println!("Checkpoint 0");
 
-    let mut witness_evals_merkle: Vec<Vec<Fp>> = witness_evals.par_iter().map(|x| vec![x.c0, x.c1]).collect();
-    let mut psi_evals_merkle: Vec<Vec<Fp>> = psi_evals.par_iter().map(|x| vec![x.c0, x.c1]).collect();
+    let mut witness_evals_merkle: Vec<Vec<Fp>> = witness_evals.iter().map(|x| vec![x.c0, x.c1]).collect();
+    let mut psi_evals_merkle: Vec<Vec<Fp>> = psi_evals.iter().map(|x| vec![x.c0, x.c1]).collect();
     let k: u32 = (((s_ord as f32).log2()).ceil()) as u32;
     witness_evals_merkle =vec![witness_evals_merkle, vec![vec![Fp::from(0),Fp::from(0)]; 2u64.pow(k) as usize - s_ord as usize]].concat();
     psi_evals_merkle =vec![psi_evals_merkle, vec![vec![Fp::from(0),Fp::from(0)]; 2u64.pow(k) as usize - s_ord as usize]].concat();
     
-    let w_merkle_slice: Vec<&[Fp]> = witness_evals_merkle.par_iter().map(|x| x.as_slice()).collect();
-    let psi_merkle_slice: Vec<&[Fp]> = psi_evals_merkle.par_iter().map(|x| x.as_slice()).collect();
+    let w_merkle_slice: Vec<&[Fp]> = witness_evals_merkle.iter().map(|x| x.as_slice()).collect();
+    let psi_merkle_slice: Vec<&[Fp]> = psi_evals_merkle.iter().map(|x| x.as_slice()).collect();
     // Merkle tree of witness evaluations on E
     let witness_mtree: FieldMT = FieldMT::new(
         &leaf_crh_params,
@@ -69,7 +68,6 @@ pub fn prove(witness: DensePolynomial<F>, psi: DensePolynomial<F>, g: F, s: F, r
         psi_merkle_slice
     )
     .unwrap();
-println!("Checkpoint 1");
     let mut roots: Vec<Fp> = vec![witness_mtree.root(), psi_mtree.root()];
     //let roots: Vec<Fp> = vec![Fp::from(0)];
     let alpha_1: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, roots[..2].to_vec().clone()).unwrap(), Fp::from(0));
@@ -94,7 +92,7 @@ println!("Checkpoint 1");
                                             .collect();
                                             
     c_evals_merkle =vec![c_evals_merkle, vec![vec![Fp::from(0),Fp::from(0)]; 2u64.pow(k) as usize - s_ord as usize]].concat();
-    let c_merkle_slice: Vec<&[Fp]> = c_evals_merkle.par_iter().map(|x| x.as_slice()).collect();
+    let c_merkle_slice: Vec<&[Fp]> = c_evals_merkle.iter().map(|x| x.as_slice()).collect();
     
     // Merkle tree of witness evaluations on E
     let c_mtree: FieldMT = FieldMT::new(
@@ -103,7 +101,6 @@ println!("Checkpoint 1");
         c_merkle_slice
     )
     .unwrap();
-    println!("Checkpoint 2");
     // Compute the evaluations of the constraint polynomial C(x) on E
    
     roots.push(c_mtree.root());
