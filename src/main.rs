@@ -7,10 +7,8 @@ pub mod matrix;
 use matrix::*;
 use merkle::{poseidon_parameters, FieldMT, FieldPath};
 use std::{
-    collections::hash_map::DefaultHasher,
     fs::File,
-    hash::{Hash, Hasher},
-    io::{self, BufRead, BufReader, Write},
+    io::{self, BufRead, BufReader},
     path::Path,
     str::FromStr,
     time::Instant,
@@ -48,7 +46,7 @@ fn main() {
     }
     let r: F = F::new(Fp::from(5), Fp::from(3));
 
-    let witness: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("new_coeffs.txt").unwrap() };
+    let witness: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file("new_coeffs.txt").unwrap() };
     let n = witness.coeffs.len();
 
     let mut rng = test_rng();
@@ -65,7 +63,7 @@ fn main() {
     };
 
     // psi
-    let psi: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("psi_coeffs.txt").unwrap() };
+    let psi: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file("psi_coeffs.txt").unwrap() };
 
     let y_start: F = b_witness.evaluate(&F::from(1));
     let y_end: F = b_witness.evaluate(&g.pow(&[728]));
@@ -76,7 +74,13 @@ fn main() {
     let grinding_param: u8 = 2;
 
     let now = Instant::now();
-    let (challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points) =
+    let (challenge_vals, 
+        roots_fri, 
+        roots, 
+        paths_fri, 
+        additional_paths, 
+        points_fri, 
+        additional_points) =
         prove(witness, psi, g, s, r, s_ord, &y_start, &y_end, l_list.clone(), rep_param, grinding_param);
     println!("Prover Time: {} s", now.elapsed().as_secs());
     
@@ -118,57 +122,7 @@ fn main() {
     return;
 }
 
-fn calculate_hash<T: Hash>(t: &T, n: u64) -> u64 {
-    let mut s = DefaultHasher::new();
-    t.hash(&mut s);
-    s.finish() % n
-}
-
-fn raise_to_power(x: F, v: u64, n: u8) -> F {
-    let mut s = x;
-    for i in 0..n{
-    s = s.pow(&[v]);}
-s
-}
-
-
-fn write_to_file(interp_poly: &Vec<F>) -> std::io::Result<()> {
-    let mut file = File::create("interp_poly_coeffs.txt")?;
-for i in interp_poly.iter() {
-    let mut i0: Fp = Fp::from(0);let mut i1: Fp = Fp::from(0);
-    if !(i.c0==Fp::from(0)) {i0 = i.c0;}
-    if !(i.c1==Fp::from(0)) {i1 = i.c1;}
-    writeln!(file, "{}, {}", i0, i1)?;
-}
-
-Ok(())}
-
 fn lines_from_file(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
-    BufReader::new(File::open(filename)?).lines()
-    .map(|line| {
-        let line = line?;
-        let mut parts = line.trim().split(",");
-        let a: Fp;
-        let b: Fp;
-        let a_tentative = Fp::from_str(parts.next().unwrap());
-        match a_tentative {
-            Ok(a_val) => a = a_val,
-            Err(_) => a = Fp::from(0),
-        }
-        let b_tentative = Fp::from_str(parts.next().unwrap());
-        match b_tentative {
-            Ok(b_val) => b = b_val,
-            Err(_) => b = Fp::from(0),
-        }
-        //let a: Fp = Fp::from_str(parts.next().unwrap()).unwrap();
-        //let b: Fp = Fp::from_str(parts.next().unwrap()).unwrap();
-        //println!("yes");
-        Ok(F::new(a,b))
-    })
-    .collect()
-}
-
-fn lines_from_file_2(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
     BufReader::new(File::open(filename)?).lines()
     .map(|line| {
         let line = line?;
@@ -197,9 +151,7 @@ fn lines_from_file_2(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
     })
     .collect()
 }
-// This element has order 2^16
-const FFT_GEN: F = F::new(MontFp!("17231939763216297887217622266809272467545088513556272765685947455324509609957290372982961616729012186542372231626409308935024145447"), MontFp!("14794844963276765294078403131215971792257250447333909245841623048180831260548488349233598857775988700515612163307689388891415390090"));
 // This is the multiplicative generator of the field ^(l-2)
 // It has order 2^217*3^136
 const MULT_GEN: F = F::new(MontFp!("4887884732269044310381829002291498723817156048752319302265161467241044247866395345194043334365723689179743805338576987868462946714"), MontFp!("9775769464538088620763658004582997447634312097504638604530322934482088495732790690388086668731447378359487610677153975736925893426"));
-// This function computes the FFT of a polynomial over the finite field F
+

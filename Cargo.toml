@@ -1,5 +1,5 @@
 [package]
-name = "csidh_walk"
+name = "sidh_csidh_walk"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,8 +11,4 @@ ark-poly = {version = "0.4.0-alpha.4", features = ["parallel"] }
 ark-crypto-primitives = "0.4.0-alpha"
 ark-sponge = "0.4.0-alpha"
 ark-std= "0.4.0-alpha"
-ndarray = "0.15.6"
-ndarray-linalg = "0.16.0"
-nalgebra = "0.31.4"
-rayon = "1.6.1"
 ark-serialize = "0.4.0-alpha"
