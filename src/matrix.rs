@@ -1,6 +1,6 @@
 use ark_ff::Field;
 
-use super::{F};
+use super::F;
 
 pub fn solve_linear_system(coeffs: Vec<Vec<F>>, constants: Vec<F>) -> Vec<F> {
     let size = coeffs.len();

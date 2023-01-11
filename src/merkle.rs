@@ -1,9 +1,13 @@
-use super::{Fp};
-use ark_crypto_primitives::{crh::poseidon, merkle_tree::{Config, IdentityDigestConverter}, MerkleTree, Path};
-use ark_sponge::poseidon::PoseidonConfig;
-use std::str::FromStr;
+use super::Fp;
+use ark_crypto_primitives::{
+    crh::poseidon,
+    merkle_tree::{Config, IdentityDigestConverter},
+    MerkleTree, Path,
+};
 use ark_ff::UniformRand;
-use ark_std::{test_rng};
+use ark_sponge::poseidon::PoseidonConfig;
+use ark_std::test_rng;
+use std::str::FromStr;
 
 type H = poseidon::CRH<Fp>;
 type TwoToOneH = poseidon::TwoToOneCRH<Fp>;
