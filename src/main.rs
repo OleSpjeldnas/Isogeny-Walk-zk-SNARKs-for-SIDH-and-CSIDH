@@ -27,6 +27,7 @@ use merkle::{poseidon_parameters, FieldMT, FieldPath};
 use pprof::*;
 use rayon::prelude::*;
 use std::time::Instant;
+
 fn main() {
     // l_vec contains all the folding factors
     let l_list: Vec<usize> = vec![vec![3; 6], vec![2; 2]].concat();
@@ -247,6 +248,7 @@ fn lines_from_file_2(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
         })
         .collect()
 }
+
 // This element has order 2^16
 const FFT_GEN: F = F::new(MontFp!("17231939763216297887217622266809272467545088513556272765685947455324509609957290372982961616729012186542372231626409308935024145447"), MontFp!("14794844963276765294078403131215971792257250447333909245841623048180831260548488349233598857775988700515612163307689388891415390090"));
 // This is the multiplicative generator of the field ^(l-2)

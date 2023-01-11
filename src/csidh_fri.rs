@@ -1,6 +1,5 @@
 use super::{poseidon_parameters, solve_linear_system, FieldMT, FieldPath, Fp, F};
-use ark_crypto_primitives::crh::poseidon;
-use ark_crypto_primitives::CRHScheme;
+use ark_crypto_primitives::{crh::poseidon, CRHScheme};
 use ark_ff::Field;
 use ark_poly::{univariate::DensePolynomial, Polynomial};
 use rayon::prelude::*;
