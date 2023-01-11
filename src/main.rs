@@ -54,6 +54,17 @@ fn main() {
                                               .naive_mul(&DensePolynomial{coeffs: vec![vec![-F::from(1)], vec![F::from(0); n-1], vec![F::from(1)]].concat()});
     let b_witness: DensePolynomial<F> =  witness.clone() + blinding_factor.clone();
     
+    
+    let b_witness_plus:  DensePolynomial<F> = DensePolynomial{coeffs: b_witness.coeffs.par_iter()
+        .enumerate()
+        .map(|(i, coeff)| coeff*g.pow(&[i as u64]))
+        .collect()};
+    let b_witness_plus_plus: DensePolynomial<F> = DensePolynomial{coeffs: b_witness_plus.coeffs.par_iter()
+        .enumerate()
+        .map(|(i, coeff)| coeff*g.pow(&[i as u64]))
+        .collect()};
+        
+            // psi
     let psi: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file_2("psi_coeffs.txt").unwrap() };
     
     let y_start: F = b_witness.evaluate(&F::from(1));
@@ -62,23 +73,18 @@ fn main() {
 
     let s_ord: u64 = 729*32;
     let rep_param: usize = 2;
-    let grinding_param: u8 = 10;
-
-    let mut prover_vec: Vec<u64> = Vec::new();
-    let mut verifier_vec: Vec<u128> = Vec::new();
-    let mut size_vec: Vec<f32> = Vec::new();
-    for _ in 0..50 {
-    let now = Instant::now();
-    let (challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points) = prove(witness.clone(), psi.clone(), g.clone(), s.clone(), r, s_ord, &y_start, &y_end, l_list.clone(), rep_param, grinding_param);
     
-    let prover_time:u64 = now.elapsed().as_secs();
-    prover_vec.push(prover_time);
-    println!("Prover Time: {} s", prover_time);
+    //let guard = pprof::ProfilerGuardBuilder::default().frequency(1000).build().unwrap();
     let now = Instant::now();
-    let b = verify(challenge_vals.clone(), roots_fri.clone(), roots.clone(), paths_fri.clone(), additional_paths.clone(), points_fri.clone(), additional_points.clone(), g, s, r, &729, s_ord, &y_start, &y_end, l_list.clone(), rep_param, grinding_param);
-    let verifier_time:u128 = now.elapsed().as_millis();
-    verifier_vec.push(verifier_time);
-    println!("Verifier Time: {} ms", verifier_time);
+    let (challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points) = prove(witness, psi, g.clone(), s.clone(), r, s_ord, &y_start, &y_end, l_list.clone(), rep_param);
+    println!("Prover Time: {} s", now.elapsed().as_secs());
+   // if let Ok(report) = guard.unwrap().report().build() {
+   //    let file = File::create("flamegraph.svg").unwrap();
+   //     report.flamegraph(file).unwrap();
+    //};
+    let now = Instant::now();
+    let b = verify(challenge_vals.clone(), roots_fri.clone(), roots.clone(), paths_fri.clone(), additional_paths.clone(), points_fri.clone(), additional_points.clone(), g, s, r, &729, s_ord, &y_start, &y_end, l_list, rep_param);
+    println!("Verifier Time: {} ms", now.elapsed().as_millis());
     if b {
         let size1 = challenge_vals.serialized_size(Compress::Yes);
         let size2 = roots.serialized_size(Compress::Yes);
