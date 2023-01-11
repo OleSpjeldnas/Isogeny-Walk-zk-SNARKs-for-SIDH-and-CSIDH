@@ -159,6 +159,7 @@ pub fn prove(
     (challenge_vals, roots_fri, roots, paths_fri, additional_paths, points_fri, additional_points)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn verify(
     challenges: Vec<F>, roots_fri: Vec<Fp>, roots: Vec<Fp>, paths_fri: Vec<FieldPath>,
     additional_paths: Vec<Vec<FieldPath>>, points_fri: Vec<F>, additional_points: Vec<Vec<F>>, g: F, s: F, r: F,
@@ -172,7 +173,7 @@ pub fn verify(
     let gz: F = g * z;
     let ggz: F = g * gz;
 
-    let alpha_1: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, roots[..2].to_vec().clone()).unwrap(), Fp::from(0));
+    let alpha_1: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, roots[..2].to_vec()).unwrap(), Fp::from(0));
     let alpha_2: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_1.c0]).unwrap(), Fp::from(0));
     let alpha_3: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_2.c0]).unwrap(), Fp::from(0));
     let alpha_4: F = F::new(poseidon::CRH::<Fp>::evaluate(&params, vec![alpha_3.c0]).unwrap(), Fp::from(0));
@@ -185,9 +186,9 @@ pub fn verify(
     // Check that the FRI queries are correct
     let (points_first, indices_first) = fri_verify(
         paths_fri,
-        points_fri.clone(),
+        points_fri,
         roots_fri,
-        l_list.clone(),
+        l_list,
         s.clone(),
         r.clone(),
         s_ord.clone(),

@@ -141,13 +141,15 @@ fn write_to_file(interp_poly: &Vec<F>) -> std::io::Result<()> {
     for i in interp_poly.iter() {
         let mut i0: Fp = Fp::from(0);
         let mut i1: Fp = Fp::from(0);
+
+        // TODO: Obfuscated logic (what is the intention here)
         if !(i.c0 == Fp::from(0)) {
             i0 = i.c0;
         }
         if !(i.c1 == Fp::from(0)) {
             i1 = i.c1;
         }
-        writeln!(file, "{}, {}", i0, i1)?;
+        writeln!(file, "{i0}, {i1}")?;
     }
 
     Ok(())
@@ -159,21 +161,16 @@ fn lines_from_file(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
         .map(|line| {
             let line = line?;
             let mut parts = line.trim().split(",");
-            let a: Fp;
-            let b: Fp;
-            let a_tentative = Fp::from_str(parts.next().unwrap());
-            match a_tentative {
-                Ok(a_val) => a = a_val,
-                Err(_) => a = Fp::from(0),
-            }
-            let b_tentative = Fp::from_str(parts.next().unwrap());
-            match b_tentative {
-                Ok(b_val) => b = b_val,
-                Err(_) => b = Fp::from(0),
-            }
-            //let a: Fp = Fp::from_str(parts.next().unwrap()).unwrap();
-            //let b: Fp = Fp::from_str(parts.next().unwrap()).unwrap();
-            //println!("yes");
+
+            let a = match Fp::from_str(parts.next().unwrap()) {
+                Ok(a_val) => a_val,
+                Err(_) => Fp::from(0),
+            };
+            let b = match Fp::from_str(parts.next().unwrap()) {
+                Ok(b_val) => b_val,
+                Err(_) => Fp::from(0),
+            };
+
             Ok(F::new(a, b))
         })
         .collect()
@@ -189,7 +186,7 @@ fn lines_from_file_2(filename: impl AsRef<Path>) -> io::Result<Vec<F>> {
             if !line.contains("*x") {
                 a = Fp::from_str(&line).unwrap();
                 b = Fp::from(0);
-            } else if !line.contains("+") {
+            } else if !line.contains('+') {
                 let mut parts = line.trim().split("*x");
                 b = Fp::from_str(parts.next().unwrap().trim()).unwrap();
                 a = Fp::from(0);
