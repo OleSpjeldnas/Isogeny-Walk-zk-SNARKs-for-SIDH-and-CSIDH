@@ -15,11 +15,11 @@ use std::{
 };
 
 // TODO: Move to separate crate
-pub mod csidh_fri;
+pub mod generalized_fri;
 pub mod get_roots;
 pub mod isogeny_prove;
 use isogeny_prove::{prove, verify};
-use csidh_fri::*;
+use generalized_fri::*;
 use ark_ff::Field;
 use ark_crypto_primitives::CRHScheme;
 use ark_crypto_primitives::crh::poseidon;
@@ -44,6 +44,9 @@ fn main() {
     for _ in 0..5 {
         g = g.pow(&[2]);
     }
+    //for _ in 0..2 {
+    //    g = g.pow(&[3]);
+    //}
     let r: F = F::new(Fp::from(5), Fp::from(3));
 
     let witness: DensePolynomial<F> = DensePolynomial { coeffs: lines_from_file("new_coeffs.txt").unwrap() };
@@ -66,8 +69,8 @@ fn main() {
     
 
     let s_ord: u64 = 729*32;
-    let rep_param: usize = 2;
-    let grinding_param: u8 = 1;
+    let rep_param: usize = 1;
+    let grinding_param: u8 = 32;
 
     let now = Instant::now();
     let (challenge_vals, 

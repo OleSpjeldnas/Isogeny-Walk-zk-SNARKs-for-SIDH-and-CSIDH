@@ -187,6 +187,7 @@ fn verify_fold_at_index(points: Vec<F>, x: F, t: F, l: usize, theta: F) -> bool 
     for (i, val) in g_vec.iter().enumerate() {
         y_supposedly += theta.pow([i as u64]) * val;
     }
+    //println!("y==y_supposedly: {:?}", y==y_supposedly);
     y == y_supposedly
 }
 
