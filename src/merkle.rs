@@ -1,4 +1,5 @@
-use super::Fp;
+// if SIDH: use super::Fp;
+use super::Kp as Fp;
 use ark_crypto_primitives::{
     crh::poseidon,
     merkle_tree::{Config, IdentityDigestConverter},

@@ -10,9 +10,6 @@ pub type F = Fp448<MontBackend<FqConfig, 7>>;
 
 pub type Fq2 = Fp2<Fq2Config>;
 pub struct Fq2Config;
-pub struct Ft(Fq2);
- 
-
 impl Fp2Config for Fq2Config {
     type Fp = F;
 
