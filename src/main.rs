@@ -5,6 +5,8 @@ pub mod sidh_sike_p434;
 use sidh_sike_p434::{F as Fp, Fq2 as F};
 pub mod matrix;
 use matrix::*;
+pub mod run_isogeny;
+use run_isogeny::*;
 use merkle::{poseidon_parameters, FieldMT, FieldPath};
 use std::{
     fs::File,

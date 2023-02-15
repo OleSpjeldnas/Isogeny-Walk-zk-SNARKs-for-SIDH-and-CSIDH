@@ -1,4 +1,4 @@
-use super::K as F;
+use super::F;
 
 pub fn solve_linear_system(coeffs: Vec<Vec<F>>, constants: Vec<F>) -> Vec<F> {
     let size = coeffs.len();

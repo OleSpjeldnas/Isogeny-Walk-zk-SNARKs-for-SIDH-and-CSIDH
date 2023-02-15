@@ -2,7 +2,7 @@
 use ark_crypto_primitives::{crh::poseidon, CRHScheme};
 use ark_ff::Field;
 use ark_poly::{univariate::DensePolynomial, Polynomial};
-use super::{K as F, FieldMT, poseidon_parameters, FieldPath, solve_linear_system, Kp as Fp};
+use super::{F, FieldMT, poseidon_parameters, FieldPath, solve_linear_system, Fp};
 
 
 // This function executes one folding step in the CSIDH-FRI algorithm
